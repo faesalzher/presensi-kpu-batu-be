@@ -1,0 +1,6 @@
+@presensi_kpu_batu_be_HostAddress = http://localhost:5183
+
+GET {{presensi_kpu_batu_be_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
