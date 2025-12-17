@@ -72,6 +72,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> DbRawTest()
     {
         var connStr = _configuration.GetConnectionString("DefaultConnection");
+        Console.WriteLine(connStr);
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
         return Ok("RAW DB CONNECTED");
