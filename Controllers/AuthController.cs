@@ -1,42 +1,45 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(AppDbContext context)
+    public AuthController(AppDbContext context, IConfiguration configuration)
     {
         _context = context;
+        _configuration = configuration;
     }
 
-[Authorize]
-[HttpGet("profile")]
-public async Task<IActionResult> Profile()
-{
-    // ambil claim sub (string)
-    var userId = User.FindFirst("sub")?.Value;
+    [Authorize]
+    [HttpGet("profile")]
+    public async Task<IActionResult> Profile()
+    {
+        // ambil claim sub (string)
+        var userId = User.FindFirst("sub")?.Value;
 
-    if (string.IsNullOrEmpty(userId))
-        return Unauthorized("Invalid token: sub claim missing.");
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized("Invalid token: sub claim missing.");
 
-    // parse ke Guid
-    if (!Guid.TryParse(userId, out var guid))
-        return BadRequest("Invalid user id format in token.");
+        // parse ke Guid
+        if (!Guid.TryParse(userId, out var guid))
+            return BadRequest("Invalid user id format in token.");
 
-    // query pakai Guid
-    var profile = await _context.Profiles
-        .AsNoTracking()
-        .FirstOrDefaultAsync(x => x.Id == guid);
+        // query pakai Guid
+        var profile = await _context.Profiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == guid);
 
-    if (profile == null)
-        return NotFound($"Profile not found for user {userId}");
+        if (profile == null)
+            return NotFound($"Profile not found for user {userId}");
 
-    return Ok(profile);
-}
+        return Ok(profile);
+    }
 
     [HttpGet("{guid}")]
     public async Task<IActionResult> GetUser(string guid)
@@ -47,6 +50,20 @@ public async Task<IActionResult> Profile()
             return NotFound(new { message = "User not found" });
 
         return Ok(user);
+    }
+
+
+    [HttpGet("config-test")]
+    public IActionResult ConfigTest()
+    {
+        var jwt = _configuration["Supabase:JwtSecret"];
+        var conn = _configuration.GetConnectionString("DefaultConnection");
+
+        return Ok(new
+        {
+            JwtLength = jwt?.Length ?? 0,
+            ConnectionStringEmpty = string.IsNullOrEmpty(conn)
+        });
     }
 
 }
