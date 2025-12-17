@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -65,5 +66,16 @@ public class AuthController : ControllerBase
             ConnectionStringEmpty = string.IsNullOrEmpty(conn)
         });
     }
+
+    [HttpGet("db-raw-test")]
+    [AllowAnonymous]
+    public async Task<IActionResult> DbRawTest()
+    {
+        var connStr = _configuration.GetConnectionString("DefaultConnection");
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+        return Ok("RAW DB CONNECTED");
+    }
+
 
 }
