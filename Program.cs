@@ -5,8 +5,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
 // === FIX WAJIB UNTUK SUPABASE POOLER ===
-// Matikan prepared statements di Npgsql (ini penyebab API lambat panggilan kedua)
-AppContext.SetSwitch("Npgsql.DisableBackendStatementPreparation", true);
+//// Matikan prepared statements di Npgsql (ini penyebab API lambat panggilan kedua)
+//AppContext.SetSwitch("Npgsql.DisableBackendStatementPreparation", true);
 // =========================================
 
 var builder = WebApplication.CreateBuilder(args);
@@ -73,7 +73,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// === DATABASE (DIPERBAIKI UNTUK SUPABASE POOLER) ===
+// === DATABASE ===
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(
@@ -86,12 +86,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 errorCodesToAdd: null
             );
             npgsqlOptions.CommandTimeout(30);
-            npgsqlOptions.SetPostgresVersion(new Version(15, 1));
+            //npgsqlOptions.SetPostgresVersion(new Version(15, 1));
         }
     );
 
-    options.EnableServiceProviderCaching(true);
-    options.EnableThreadSafetyChecks(false);
+    //options.EnableServiceProviderCaching(true);
+    //options.EnableThreadSafetyChecks(false);
 
     // Default: NoTracking supaya query ringan dan cepat
     options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
