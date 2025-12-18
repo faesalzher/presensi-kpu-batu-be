@@ -80,10 +80,10 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpGet("health")]
+    [HttpHead("/health")]
     public async Task<IActionResult> Health()
     {
-        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
-        return Ok("ok");
+        return Ok();
     }
 
 
