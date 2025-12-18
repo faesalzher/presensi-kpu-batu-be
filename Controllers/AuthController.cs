@@ -80,7 +80,7 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpGet("health")]
-    [HttpHead("/health")]
+    [HttpHead("health")]
     public async Task<IActionResult> Health()
     {
         return Ok();
