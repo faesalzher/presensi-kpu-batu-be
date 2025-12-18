@@ -22,6 +22,9 @@ builder.Configuration
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
                        ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 // Controller + Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -143,11 +146,11 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Swagger dev only
-//if (app.Environment.IsDevelopment())
-//{
+if (app.Environment.IsDevelopment())
+{
     app.UseSwagger();
     app.UseSwaggerUI();
-//}
+}
 
 app.UseHttpsRedirection();
 
