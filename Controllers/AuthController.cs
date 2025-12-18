@@ -78,5 +78,11 @@ public class AuthController : ControllerBase
         return Ok("RAW DB CONNECTED");
     }
 
+    [HttpGet("health")]
+    public async Task<IActionResult> Health()
+    {
+        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+        return Ok("ok");
+    }
 
 }
