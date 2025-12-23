@@ -6,23 +6,23 @@ using System.Text.Json.Serialization;
 public class User
 {
     [Key]
-    [Column("guid")]
     [Required]
-    public string Guid { get; set; }
+    [Column("guid", TypeName = "uuid")]
+    public Guid Guid { get; set; } 
 
     [Column("full_name")]
     [Required]
-    public string FullName { get; set; }
+    public string? FullName { get; set; }
 
     [Column("email")]
     [Required]
-    public string Email { get; set; }
+    public string? Email { get; set; }
 
     [Column("nip")]
-    public string Nip { get; set; }
+    public string? Nip { get; set; }
 
     [Column("phone_number")]
-    public string PhoneNumber { get; set; }
+    public string? PhoneNumber { get; set; }
 
     [Column("profile_image")]
     public string? ProfileImage { get; set; }
@@ -31,13 +31,13 @@ public class User
     public string? ProfileImageUrl { get; set; }
 
     [Column("role")]
-    public string Role { get; set; }
+    public string? Role { get; set; }
 
     [Column("department")]
-    public string Department { get; set; }
+    public string? Department { get; set; }
 
     [Column("position")]
-    public string Position { get; set; }
+    public string? Position { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; }
