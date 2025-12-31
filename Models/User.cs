@@ -33,8 +33,8 @@ public class User
     [Column("role")]
     public string? Role { get; set; }
 
-    [Column("department")]
-    public string? Department { get; set; }
+    [Column("department_id")]
+    public Guid? DepartmentId { get; set; }
 
     [Column("position")]
     public string? Position { get; set; }

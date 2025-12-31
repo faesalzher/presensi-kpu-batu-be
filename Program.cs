@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using presensi_kpu_batu_be.Interfaces;
+using presensi_kpu_batu_be.Application.Services;
 
 // === FIX WAJIB UNTUK SUPABASE POOLER ===
 // Matikan prepared statements di Npgsql (ini penyebab API lambat panggilan kedua)
@@ -142,6 +144,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+
+//
+builder.Services.AddScoped<IUserService, UserService>();
 
 var app = builder.Build();
 

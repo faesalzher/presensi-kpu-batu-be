@@ -3,16 +3,19 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using presensi_kpu_batu_be.DTO.Response;
+using presensi_kpu_batu_be.Interfaces;
 
 [ApiController]
 [Route("user")]
 public class UserContoller : ControllerBase
 {
     private readonly AppDbContext _context;
-
-    public UserContoller(AppDbContext context)
+    private readonly IUserService iUserService;
+    public UserContoller(AppDbContext context, IUserService userService)
     {
         _context = context;
+        iUserService = userService;
     }
 
     [Authorize]
@@ -41,9 +44,9 @@ public class UserContoller : ControllerBase
     }
 
     [HttpGet("{guid}")]
-    public async Task<IActionResult> GetUser(Guid guid)
+    public async Task<IActionResult> GetUserByGuid(Guid guid)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Guid == guid);
+        UserResponse? user = await iUserService.GetUserByGuid(guid);
 
         if (user == null)
             return NotFound(new { message = "User not found" });
