@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 
-namespace AbsensiTestOne.Models
+namespace presensi_kpu_batu_be.Infrastucture.Models
 {
     [Table("profiles")]
     public class Profile

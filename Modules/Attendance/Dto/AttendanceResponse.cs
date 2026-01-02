@@ -1,0 +1,38 @@
+﻿namespace presensi_kpu_batu_be.Modules.Attendance
+{
+    public class AttendanceResponse
+    {
+        public Guid Guid { get; set; }
+
+        // User
+        public Guid UserId { get; set; }
+        public string? UserName { get; set; }   // optional (kalau join user)
+
+        // Department
+        public Guid? DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
+
+        // Date
+        public DateOnly Date { get; set; }
+
+        // Check In
+        public DateTime? CheckInTime { get; set; }
+        public string? CheckInLocation { get; set; }
+        public Guid? CheckInPhotoId { get; set; }
+        public string? CheckInNotes { get; set; }
+
+        // Check Out
+        public DateTime? CheckOutTime { get; set; }
+        public string? CheckOutLocation { get; set; }
+        public Guid? CheckOutPhotoId { get; set; }
+        public string? CheckOutNotes { get; set; }
+
+        // Work
+        public decimal? WorkHours { get; set; }
+        public string Status { get; set; } = default!;
+
+        // Audit (opsional kirim ke FE)
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+}

@@ -1,10 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using presensi_kpu_batu_be.DTO.Response;
-using presensi_kpu_batu_be.Interfaces;
-using presensi_kpu_batu_be.Models;
+using presensi_kpu_batu_be.Modules.User.Dto;
 
 
-namespace presensi_kpu_batu_be.Application.Services
+namespace presensi_kpu_batu_be.Modules.User
 {
     public class UserService : IUserService
     {

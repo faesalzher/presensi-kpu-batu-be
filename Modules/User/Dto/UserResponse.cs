@@ -1,4 +1,4 @@
-﻿namespace presensi_kpu_batu_be.DTO.Response
+﻿namespace presensi_kpu_batu_be.Modules.User.Dto
 {
     public class UserResponse
     {

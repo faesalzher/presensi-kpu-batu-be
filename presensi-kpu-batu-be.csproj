@@ -5,10 +5,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>presensi_kpu_batu_be</RootNamespace>
+	  <EnableNETAnalyzers>true</EnableNETAnalyzers>
+	  <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+		<PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.101">
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		  <PrivateAssets>all</PrivateAssets>
+		</PackageReference>
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
 			<PrivateAssets>all</PrivateAssets>
@@ -21,10 +27,6 @@
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
 		<PackageReference Include="Serilog" Version="4.3.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="DTO\Request\" />
 	</ItemGroup>
 
 </Project>

@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using presensi_kpu_batu_be.DTO.Response;
-using presensi_kpu_batu_be.Interfaces;
+using presensi_kpu_batu_be.Modules.User;
+using presensi_kpu_batu_be.Modules.User.Dto;
 
 [ApiController]
 [Route("user")]
