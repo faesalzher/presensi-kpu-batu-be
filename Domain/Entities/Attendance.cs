@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace presensi_kpu_batu_be.Infrastucture.Models
+namespace presensi_kpu_batu_be.Domain.Entities
 {
     [Table("attendance")]
     public class Attendance
@@ -54,13 +54,13 @@ namespace presensi_kpu_batu_be.Infrastucture.Models
 
         [Required]
         [Column("status")]
-        public string Status { get; set; } = default!;
+        public WorkingStatus Status { get; set; } = default!;
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
         [Column("updated_at")]
-        public DateTime? UpdatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         // =====================
         // Navigation Properties

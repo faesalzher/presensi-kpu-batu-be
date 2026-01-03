@@ -1,0 +1,12 @@
+﻿public enum WorkingStatus
+{
+    PRESENT,
+    ABSENT,
+    LATE,
+    EARLY_DEPARTURE,
+    ON_LEAVE,
+    OFFICIAL_TRAVEL,
+    REMOTE_WORKING,
+    WORK_FROM_HOME,
+    WORK_FROM_ANYWHERE
+}

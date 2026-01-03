@@ -1,4 +1,4 @@
-﻿namespace presensi_kpu_batu_be.Modules.Attendance
+﻿namespace presensi_kpu_batu_be.Modules.AttendanceModule
 {
     public class AttendanceResponse
     {
@@ -29,7 +29,7 @@
 
         // Work
         public decimal? WorkHours { get; set; }
-        public string Status { get; set; } = default!;
+        public WorkingStatus Status { get; set; } = default!;
 
         // Audit (opsional kirim ke FE)
         public DateTime CreatedAt { get; set; }

@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using presensi_kpu_batu_be.Modules.Attendance;
-using presensi_kpu_batu_be.Modules.Attendance.Dto;
+using presensi_kpu_batu_be.Modules.AttendanceModule;
+using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using System.Security.Claims;
 
 [ApiController]
@@ -28,12 +27,13 @@ public class AttendanceController : ControllerBase
     // =========================
     [HttpPost("check-in")]
     //[RequestSizeLimit(5 * 1024 * 1024)] // 5MB
-    public async Task<IActionResult> CheckIn([FromForm] CheckInDto dto){
+    public async Task<IActionResult> CheckIn([FromForm] CheckInDto dto)
+    {
         var userGuid = GetUserGuid();
 
-        Guid? fileGuid = null;
+        //Guid? fileGuid = null;
 
-        var result = await _attendanceService.CheckIn(userGuid,dto,fileGuid);
+        var result = await _attendanceService.CheckIn(userGuid, dto);
 
         return Ok(result);
     }

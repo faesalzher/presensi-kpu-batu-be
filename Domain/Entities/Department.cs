@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace presensi_kpu_batu_be.Infrastucture.Models
+namespace presensi_kpu_batu_be.Domain.Entities
 {
     [Table("department")]
     public class Department

@@ -1,7 +1,10 @@
+using Application.Common.Exceptions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using presensi_kpu_batu_be.Modules.Attendance;
+using presensi_kpu_batu_be.Modules.AttendanceModule;
+using presensi_kpu_batu_be.Modules.GeneralSettingModule;
 using presensi_kpu_batu_be.Modules.User;
 using System;
 using System.Text;
@@ -143,14 +146,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+
 builder.Services.AddAuthorization();
 
 
 //daftarkan interface dan service
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
+builder.Services.AddScoped<IGeneralSettingService, GeneralSettingService>();
+
 
 var app = builder.Build();
+
+//catch exception globally
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exception =
+            context.Features.Get<IExceptionHandlerFeature>()?.Error;
+
+        context.Response.ContentType = "application/json";
+
+        context.Response.StatusCode = exception switch
+        {
+            BadRequestException => StatusCodes.Status400BadRequest,
+            NotFoundException => StatusCodes.Status404NotFound,
+            _ => StatusCodes.Status500InternalServerError
+        };
+
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = exception?.Message
+        });
+    });
+});
 
 // Swagger dev only
 if (app.Environment.IsDevelopment())
