@@ -1,4 +1,4 @@
-﻿namespace presensi_kpu_batu_be.Modules.GeneralSettingModule
+﻿namespace presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting
 {
     public interface IGeneralSettingService
     {

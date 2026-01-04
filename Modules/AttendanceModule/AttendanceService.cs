@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using presensi_kpu_batu_be.Common.Constants;
 using presensi_kpu_batu_be.Domain.Entities;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
-using presensi_kpu_batu_be.Modules.GeneralSettingModule;
+using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 
 namespace presensi_kpu_batu_be.Modules.AttendanceModule
 {
@@ -13,12 +13,16 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         private readonly ILeaveRequestService _leaveRequestsService;
         private readonly IDepartmentService _departmentService;
         private readonly IGeneralSettingService _settingService;
-        public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IDepartmentService departmentService, IGeneralSettingService settingService)
+        private readonly ITimeProviderService _timeProviderService;
+
+        public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IDepartmentService departmentService, IGeneralSettingService settingService
+            , ITimeProviderService timeProvidersService)
         {
             _context = context;
             _leaveRequestsService = leaveRequestsService;
             _departmentService = departmentService;
             _settingService = settingService;
+            _timeProviderService = timeProvidersService;
         }
 
         public async Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid)
@@ -64,7 +68,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 GeneralSettingCodes.TIMEZONE
             );
 
-            var nowUtc = DateTime.UtcNow;
+            var nowUtc = await _timeProviderService.NowAsync();
 
             TimeZoneInfo tz;
             try
@@ -78,8 +82,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             }
 
-            var now = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
-            var today = DateOnly.FromDateTime(now);
+            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
+            var today = DateOnly.FromDateTime(nowLocal);
 
             // 1. Check leave
             var leaveStatus = await _leaveRequestsService
@@ -118,11 +122,11 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             int lateToleranceMinutes = Convert.ToInt32(await _settingService.GetAsync(GeneralSettingCodes.LATE_TOLERANCE_MINUTES));
 
-            var workStartTime = new DateTime(now.Year, now.Month, now.Day, workStartTimeOnly.Hour, workStartTimeOnly.Minute, 0);
+            var workStartTime = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, workStartTimeOnly.Hour, workStartTimeOnly.Minute, 0);
 
             var lateLimitTime = workStartTime.AddMinutes(lateToleranceMinutes);
 
-            var isLate = now > lateLimitTime;
+            var isLate = nowLocal > lateLimitTime;
 
             // default
             var status = WorkingStatus.PRESENT;

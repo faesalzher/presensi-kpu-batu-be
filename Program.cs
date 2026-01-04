@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
-using presensi_kpu_batu_be.Modules.GeneralSettingModule;
+using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.User;
 using System;
 using System.Text;
@@ -156,7 +156,7 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 builder.Services.AddScoped<IGeneralSettingService, GeneralSettingService>();
-
+builder.Services.AddScoped<ITimeProviderService, TimeProviderService>();
 
 var app = builder.Build();
 
