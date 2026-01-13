@@ -179,5 +179,101 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             return attendance;
         }
+
+        public async Task<Attendance> CheckOut(Guid userId, CheckOutDto dto)
+        {
+            // 1. Ambil timezone (konsisten dgn CheckIn)
+            var timezoneId = await _settingService.GetAsync(
+                GeneralSettingCodes.TIMEZONE);
+
+            var nowUtc = await _timeProviderService.NowAsync();
+
+            TimeZoneInfo tz;
+            try
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch
+            {
+                // fallback Windows
+                tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+
+            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
+            var today = DateOnly.FromDateTime(nowLocal);
+
+            // 2. Cari attendance hari ini
+            var attendance = await _context.Attendance
+                .FirstOrDefaultAsync(a =>
+                    a.UserId == userId &&
+                    a.Date == today);
+
+            if (attendance == null)
+                throw new BadRequestException("You have not checked in today");
+
+            if (attendance.CheckOutTime != null)
+                throw new BadRequestException("You have already checked out today");
+
+            // 3. Hitung jam kerja (pakai UTC biar presisi)
+            if (attendance.CheckInTime == null)
+                throw new BadRequestException("Invalid check-in data");
+
+            var workHours = (decimal)(nowUtc - attendance.CheckInTime.Value).TotalHours;
+
+            // 4. Cek pulang awal
+            var workEndTimeOnly = TimeOnly.Parse(
+                await _settingService.GetAsync(
+                    GeneralSettingCodes.WORKING_END_TIME)); // contoh: 17:00
+
+            int earlyLeaveToleranceMinutes = Convert.ToInt32(
+                await _settingService.GetAsync(
+                    GeneralSettingCodes.EARLY_LEAVE_TOLERANCE_MINUTES));
+
+            var workEndTimeLocal = new DateTime(
+                nowLocal.Year,
+                nowLocal.Month,
+                nowLocal.Day,
+                workEndTimeOnly.Hour,
+                workEndTimeOnly.Minute,
+                0);
+
+            var earlyLeaveLimit = workEndTimeLocal
+                .AddMinutes(-earlyLeaveToleranceMinutes);
+
+            bool isEarlyDeparture = nowLocal < earlyLeaveLimit;
+
+            // 5. Tentukan status
+            var status = attendance.Status;
+
+            if (isEarlyDeparture && status == WorkingStatus.PRESENT)
+            {
+                var leaveStatus = await _leaveRequestsService
+                    .CheckUserLeaveStatusAsync(userId, today);
+
+                if (leaveStatus.IsOnLeave &&
+                    (leaveStatus.LeaveType == LeaveRequestType.WFH ||
+                     leaveStatus.LeaveType == LeaveRequestType.WFA))
+                {
+                    status = WorkingStatus.REMOTE_WORKING;
+                }
+                else
+                {
+                    status = WorkingStatus.EARLY_DEPARTURE;
+                }
+            }
+
+            // 6. Update attendance
+            attendance.CheckOutTime = nowUtc; // SIMPAN UTC
+            attendance.CheckOutNotes = dto.Notes ?? string.Empty;
+            attendance.WorkHours = Math.Round(workHours, 2);
+            attendance.Status = status;
+            attendance.UpdatedAt = DateTime.UtcNow.AddMinutes(1);
+
+            //_context.Attendance.Update(attendance);
+            await _context.SaveChangesAsync();
+
+            //Console.WriteLine($"Affected rows = {affected}");
+            return attendance;
+        }
     }
 }

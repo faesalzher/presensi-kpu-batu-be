@@ -98,8 +98,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.EnableServiceProviderCaching(true);
     options.EnableThreadSafetyChecks(false);
 
-    // Default: NoTracking supaya query ringan dan cepat
-    options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    //// Default: NoTracking supaya query ringan dan cepat
+    //options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
 });
 
 // === JWT AUTH ===

@@ -38,6 +38,23 @@ public class AttendanceController : ControllerBase
         return Ok(result);
     }
 
+    // =========================
+    // CHECK OUT
+    // POST /attendance/check-out
+    // =========================
+    [HttpPost("check-out")]
+    //[RequestSizeLimit(5 * 1024 * 1024)] // 5MB
+    public async Task<IActionResult> CheckOut([FromForm] CheckOutDto dto)
+    {
+        var userGuid = GetUserGuid();
+
+        //Guid? fileGuid = null;
+
+        var result = await _attendanceService.CheckOut(userGuid, dto);
+
+        return Ok(result);
+    }
+
     //// =========================
     //// CHECK OUT
     //// POST /api/attendance/check-out
