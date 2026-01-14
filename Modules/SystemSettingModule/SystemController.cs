@@ -48,4 +48,11 @@ public class SystemController : ControllerBase
             Timezone = timezoneId
         });
     }
+
+    [HttpGet("working-day/today")]
+    public async Task<IActionResult> GetTodayWorkingDay()
+    {
+        var result = await _timeProviderService.GetTodayWorkingInfoAsync();
+        return Ok(result);
+    }
 }
