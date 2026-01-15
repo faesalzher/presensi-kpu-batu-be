@@ -8,8 +8,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
     public interface IAttendanceService
     {
         Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid);
-        Task<Attendance> CheckIn(Guid userId, CheckInDto checkInDto);
-        Task<Attendance> CheckOut(Guid userId, CheckOutDto checkOutDto);
+        Task<AttendanceResponse> CheckIn(Guid userId, CheckInDto checkInDto);
+        Task<AttendanceResponse> CheckOut(Guid userId, CheckOutDto checkOutDto);
     }
 
 

@@ -1,7 +1,8 @@
-using Application.Common.Exceptions;
+﻿using Application.Common.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using presensi_kpu_batu_be.Common.Constants;
 using presensi_kpu_batu_be.Domain.Entities;
+using presensi_kpu_batu_be.Domain.Enums;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 
@@ -62,127 +63,11 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
         }
 
-        public async Task<Attendance> CheckIn(Guid userId, CheckInDto dto)
+        public async Task<AttendanceResponse> CheckIn(Guid userId, CheckInDto dto)
         {
-            var timezoneId = await _settingService.GetAsync(
-                GeneralSettingCodes.TIMEZONE
-            );
-
-            var nowUtc = await _timeProviderService.NowAsync();
-
-            TimeZoneInfo tz;
-            try
-            {
-                tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
-            }
-            catch
-            {
-                // Render (Linux) aman Asia/Jakarta
-                // fallback Windows untuk dev lokal
-                tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
-            }
-
-            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
-            var today = DateOnly.FromDateTime(nowLocal);
-
-            // 1. Check leave
-            var leaveStatus = await _leaveRequestsService
-                .CheckUserLeaveStatusAsync(userId, today);
-
-            if (leaveStatus.IsOnLeave)
-                throw new BadRequestException(
-                    $"You are on {leaveStatus.LeaveType} today and cannot check in");
-
-            // 2. existing attendance today
-            var attendance = await _context.Attendance
-                .FirstOrDefaultAsync(a =>
-                    a.UserId == userId &&
-                    a.Date == today);
-
-            if (attendance?.CheckInTime != null)
-                throw new BadRequestException("You have already checked in today");
-
-            // 3. Get user department
-            var departmentId = await _departmentService
-                .GetPrimaryDepartmentIdAsync(userId);
-
-            ////// 4. Verify location
-            ////var location = new GeoLocation
-            ////{
-            ////    Latitude = dto.Latitude,
-            ////    Longitude = dto.Longitude,
-            ////    Accuracy = dto.Accuracy,
-            ////    Provider = dto.Provider
-            ////};
-
-            ////var isWithinGeofence = _geoService.IsWithinGeofence(location);
-
-            // 5. Determine status 
-            var workStartTimeOnly = TimeOnly.Parse(await _settingService.GetAsync(GeneralSettingCodes.WORKING_START_TIME));
-
-            int lateToleranceMinutes = Convert.ToInt32(await _settingService.GetAsync(GeneralSettingCodes.LATE_TOLERANCE_MINUTES));
-
-            var workStartTime = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, workStartTimeOnly.Hour, workStartTimeOnly.Minute, 0);
-
-            var lateLimitTime = workStartTime.AddMinutes(lateToleranceMinutes);
-
-            var isLate = nowLocal > lateLimitTime;
-
-            // default
-            var status = WorkingStatus.PRESENT;
-
-
-            //if (!isWithinGeofence)
-            //    status = WorkingStatus.REMOTE_WORKING;
-            if (isLate)
-                status = WorkingStatus.LATE;
-
-            // 6. Create / Update
-            if (attendance != null)
-            {
-                attendance.CheckInTime = nowUtc;
-                //attendance.CheckInLocation = location.ToString();
-                //attendance.CheckInPhotoId = photoFileGuid;
-                attendance.CheckInNotes = dto.Notes;
-                attendance.Status = status;
-                attendance.UpdatedAt = nowUtc;
-            }
-            else
-            {
-                attendance = new Attendance
-                {
-                    Guid = Guid.NewGuid(),
-                    UserId = userId,
-                    DepartmentId = departmentId,
-                    Date = today,
-                    CheckInTime = nowUtc,
-                    //CheckInLocation = location.ToString(),
-                    //CheckInPhotoId = photoFileGuid,
-                    CheckInNotes = dto.Notes,
-                    Status = status,
-                    CreatedAt = nowUtc,
-                    UpdatedAt = nowUtc
-                };
-
-                _context.Attendance.Add(attendance);
-            }
-
-            await _context.SaveChangesAsync();
-
-            ////// 7. Update file relation
-            ////if (photoFileGuid.HasValue)
-            ////{
-            ////    await _filesService.UpdateFileRelationAsync(
-            ////        photoFileGuid.Value,
-            ////        attendance.Guid);
-            ////}
-
-            return attendance;
-        }
-
-        public async Task<Attendance> CheckOut(Guid userId, CheckOutDto dto)
-        {
-            // 1. Ambil timezone (konsisten dgn CheckIn)
+            // ======================================================
+            // 1. TIME & DATE (UTC + LOCAL)
+            // ======================================================
             var timezoneId = await _settingService.GetAsync(
                 GeneralSettingCodes.TIMEZONE);
 
@@ -195,14 +80,172 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             }
             catch
             {
-                // fallback Windows
                 tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             }
 
-            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
             var today = DateOnly.FromDateTime(nowLocal);
 
-            // 2. Cari attendance hari ini
+            // ======================================================
+            // 2. VALIDASI HARI KERJA & JAM ABSENSI
+            // ======================================================
+            var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
+
+            if (workingDay.IsHoliday)
+                throw new BadRequestException(workingDay.Message);
+
+            if (!workingDay.IsWorkAllowed)
+                throw new BadRequestException(workingDay.Message);
+
+            // ======================================================
+            // 3. CEK CUTI / IZIN
+            // ======================================================
+            var leaveStatus = await _leaveRequestsService
+                .CheckUserLeaveStatusAsync(userId, today);
+
+            if (leaveStatus.IsOnLeave)
+                throw new BadRequestException(
+                    $"You are on {leaveStatus.LeaveType} today and cannot check in");
+
+            // ======================================================
+            // 4. CEK ATTENDANCE HARI INI
+            // ======================================================
+            var attendance = await _context.Attendance
+                .FirstOrDefaultAsync(a =>
+                    a.UserId == userId &&
+                    a.Date == today);
+
+            if (attendance?.CheckInTime != null)
+                throw new BadRequestException("You have already checked in today");
+
+            // ======================================================
+            // 5. STATUS KEHADIRAN (DEFAULT)
+            // ======================================================
+            var status = WorkingStatus.PRESENT;
+
+            // ======================================================
+            // 6. CREATE / UPDATE ATTENDANCE
+            // ======================================================
+            if (attendance == null)
+            {
+                attendance = new Attendance
+                {
+                    Guid = Guid.NewGuid(),
+                    UserId = userId,
+                    Date = today,
+                    Status = status,
+                    CheckInTime = nowUtc,   // SIMPAN UTC
+                    CheckInNotes = dto.Notes,
+                    CreatedAt = nowUtc,
+                    UpdatedAt = nowUtc
+                };
+
+                _context.Attendance.Add(attendance);
+                await _context.SaveChangesAsync();
+                // ⬆️ PENTING: supaya attendance.Guid tersedia untuk FK
+            }
+            else
+            {
+                attendance.CheckInTime = nowUtc;
+                attendance.CheckInNotes = dto.Notes;
+                attendance.Status = status;
+                attendance.UpdatedAt = nowUtc;
+
+                await _context.SaveChangesAsync();
+            }
+
+            // ======================================================
+            // 7. DETEKSI TELAT → INSERT VIOLATION
+            // ======================================================
+            var workStart = TimeOnly.Parse(workingDay.WorkStart!);
+
+            int lateToleranceMinutes = Convert.ToInt32(
+                await _settingService.GetAsync(
+                    GeneralSettingCodes.LATE_TOLERANCE_MINUTES));
+
+            var workStartTimeLocal = new DateTime(
+                nowLocal.Year,
+                nowLocal.Month,
+                nowLocal.Day,
+                workStart.Hour,
+                workStart.Minute,
+                0);
+
+            var lateLimitTime = workStartTimeLocal
+                .AddMinutes(lateToleranceMinutes);
+
+            if (nowLocal > lateLimitTime)
+            {
+                var violation = new AttendanceViolation
+                {
+                    Guid = Guid.NewGuid(),
+                    AttendanceId = attendance.Guid,
+                    Type = AttendanceViolationType.LATE,
+                    Source = ViolationSource.CHECK_IN,
+                    PenaltyPercent = 2.5m,
+                    OccurredAt = nowUtc,
+                    Notes = "Terlambat masuk kerja"
+                };
+
+                _context.AttendanceViolation.Add(violation);
+                await _context.SaveChangesAsync();
+            }
+
+            // ======================================================
+            // 8. RETURN
+            // ======================================================
+
+            var response = new AttendanceResponse
+            {
+                Guid = attendance.Guid,
+                UserId = attendance.UserId,
+                Date = attendance.Date,
+                CheckInTime = attendance.CheckInTime,
+                CheckOutTime = attendance.CheckOutTime,
+                WorkHours = attendance.WorkHours,
+                Status = attendance.Status,
+            };
+            return response;
+        }
+
+
+        public async Task<AttendanceResponse> CheckOut(Guid userId, CheckOutDto dto)
+        {
+            // ======================================================
+            // 1. TIMEZONE & WAKTU
+            // ======================================================
+            var timezoneId = await _settingService.GetAsync(
+                GeneralSettingCodes.TIMEZONE);
+
+            var nowUtc = await _timeProviderService.NowAsync();
+
+            TimeZoneInfo tz;
+            try
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+            var today = DateOnly.FromDateTime(nowLocal);
+
+            // ======================================================
+            // 2. VALIDASI HARI & JAM KERJA
+            // ======================================================
+            var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
+
+            if (workingDay.IsHoliday)
+                throw new BadRequestException(workingDay.Message);
+
+            if (!workingDay.IsWorkAllowed)
+                throw new BadRequestException(workingDay.Message);
+
+            // ======================================================
+            // 3. AMBIL ATTENDANCE
+            // ======================================================
             var attendance = await _context.Attendance
                 .FirstOrDefaultAsync(a =>
                     a.UserId == userId &&
@@ -214,16 +257,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             if (attendance.CheckOutTime != null)
                 throw new BadRequestException("You have already checked out today");
 
-            // 3. Hitung jam kerja (pakai UTC biar presisi)
             if (attendance.CheckInTime == null)
                 throw new BadRequestException("Invalid check-in data");
 
-            var workHours = (decimal)(nowUtc - attendance.CheckInTime.Value).TotalHours;
+            // ======================================================
+            // 4. HITUNG JAM KERJA (UTC)
+            // ======================================================
+            var workHours =
+                (decimal)(nowUtc - attendance.CheckInTime.Value).TotalHours;
 
-            // 4. Cek pulang awal
-            var workEndTimeOnly = TimeOnly.Parse(
-                await _settingService.GetAsync(
-                    GeneralSettingCodes.WORKING_END_TIME)); // contoh: 17:00
+            // ======================================================
+            // 5. DETEKSI PULANG CEPAT
+            // ======================================================
+            var workEnd = TimeOnly.Parse(workingDay.WorkEnd!);
 
             int earlyLeaveToleranceMinutes = Convert.ToInt32(
                 await _settingService.GetAsync(
@@ -233,47 +279,56 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 nowLocal.Year,
                 nowLocal.Month,
                 nowLocal.Day,
-                workEndTimeOnly.Hour,
-                workEndTimeOnly.Minute,
+                workEnd.Hour,
+                workEnd.Minute,
                 0);
 
-            var earlyLeaveLimit = workEndTimeLocal
-                .AddMinutes(-earlyLeaveToleranceMinutes);
+            var earlyLeaveLimit =
+                workEndTimeLocal.AddMinutes(-earlyLeaveToleranceMinutes);
 
             bool isEarlyDeparture = nowLocal < earlyLeaveLimit;
 
-            // 5. Tentukan status
-            var status = attendance.Status;
-
-            if (isEarlyDeparture && status == WorkingStatus.PRESENT)
-            {
-                var leaveStatus = await _leaveRequestsService
-                    .CheckUserLeaveStatusAsync(userId, today);
-
-                if (leaveStatus.IsOnLeave &&
-                    (leaveStatus.LeaveType == LeaveRequestType.WFH ||
-                     leaveStatus.LeaveType == LeaveRequestType.WFA))
-                {
-                    status = WorkingStatus.REMOTE_WORKING;
-                }
-                else
-                {
-                    status = WorkingStatus.EARLY_DEPARTURE;
-                }
-            }
-
-            // 6. Update attendance
-            attendance.CheckOutTime = nowUtc; // SIMPAN UTC
+            // ======================================================
+            // 6. UPDATE ATTENDANCE (TANPA UBAH STATUS)
+            // ======================================================
+            attendance.CheckOutTime = nowUtc; // UTC
             attendance.CheckOutNotes = dto.Notes ?? string.Empty;
             attendance.WorkHours = Math.Round(workHours, 2);
-            attendance.Status = status;
-            attendance.UpdatedAt = DateTime.UtcNow.AddMinutes(1);
+            attendance.UpdatedAt = nowUtc;
 
-            //_context.Attendance.Update(attendance);
             await _context.SaveChangesAsync();
 
-            //Console.WriteLine($"Affected rows = {affected}");
-            return attendance;
+            // ======================================================
+            // 7. CATAT VIOLATION (JIKA ADA)
+            // ======================================================
+            if (isEarlyDeparture)
+            {
+                var violation = new AttendanceViolation
+                {
+                    Guid    = Guid.NewGuid(),
+                    AttendanceId = attendance.Guid,
+                    Type = AttendanceViolationType.EARLY_DEPARTURE,
+                    Source = ViolationSource.CHECK_OUT,
+                    PenaltyPercent = 2.5m,
+                    OccurredAt = nowUtc,
+                    Notes = "Pulang sebelum waktunya"
+                };
+                _context.AttendanceViolation.Add(violation);
+                await _context.SaveChangesAsync();
+            }
+
+            var response = new AttendanceResponse
+            {
+                Guid = attendance.Guid,
+                UserId = attendance.UserId,
+                Date = attendance.Date,
+                CheckInTime = attendance.CheckInTime,
+                CheckOutTime = attendance.CheckOutTime,
+                WorkHours = attendance.WorkHours,
+                Status = attendance.Status,
+            };
+            return response;
         }
+
     }
 }

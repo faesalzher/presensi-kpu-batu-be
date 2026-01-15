@@ -68,5 +68,9 @@ namespace presensi_kpu_batu_be.Domain.Entities
 
         [ForeignKey(nameof(DepartmentId))]
         public Department? Department { get; set; }
+
+        [InverseProperty(nameof(AttendanceViolation.Attendance))]
+        public ICollection<AttendanceViolation> Violation { get; set; }
+            = new List<AttendanceViolation>();
     }
 }
