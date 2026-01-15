@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
-using System;
 
 [ApiController]
 [Route("system")]
@@ -56,5 +55,4 @@ public class SystemController : ControllerBase
         var result = await _timeProviderService.GetTodayWorkingInfoAsync();
         return Ok(result);
     }
-
 }
