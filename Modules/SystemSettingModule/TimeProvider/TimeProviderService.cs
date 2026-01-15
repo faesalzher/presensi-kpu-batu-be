@@ -1,4 +1,5 @@
-﻿using presensi_kpu_batu_be.Domain.Enums;
+﻿using presensi_kpu_batu_be.Common.Constants;
+using presensi_kpu_batu_be.Domain.Enums;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.Dto;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 
@@ -53,7 +54,26 @@ public class TimeProviderService : ITimeProviderService
 
     public async Task<WorkingDayResponseDto> GetTodayWorkingInfoAsync()
     {
-        var nowLocal = await NowAsync();
+        var timezoneId = await _generalSettingService.GetAsync(
+             GeneralSettingCodes.TIMEZONE
+         );
+
+        var nowUtc = await NowAsync();
+
+        TimeZoneInfo tz;
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+        }
+        catch
+        {
+            // Render (Linux) aman Asia/Jakarta
+            // fallback Windows untuk dev lokal
+            tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+        }
+
+        var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
+
         var today = DateOnly.FromDateTime(nowLocal);
         int day = NormalizeDayOfWeek(today);
 
@@ -137,7 +157,7 @@ public class TimeProviderService : ITimeProviderService
             IsWorkAllowed = true,
             Type = WorkingDayType.WORKING_DAY.ToString(),
             WorkStart = start.ToString("HH:mm"),
-            WorkEnd= end.ToString("HH:mm"),
+            WorkEnd = end.ToString("HH:mm"),
             WorkOpened = open.ToString("HH:mm"),
             WorkClosed = close.ToString("HH:mm"),
             Message = "Presensi dibuka",
