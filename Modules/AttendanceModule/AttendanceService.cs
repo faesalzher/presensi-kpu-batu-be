@@ -30,6 +30,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
+
             return await _context.Attendance
                 .AsNoTracking()
                 .Where(a => a.UserId == userGuid && a.Date == today)
@@ -42,6 +43,9 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     DepartmentName = a.Department != null ? a.Department.Name : null,
 
                     Date = a.Date,
+
+                    isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
+                    isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
 
                     CheckInTime = a.CheckInTime,
                     CheckInLocation = a.CheckInLocation,
@@ -58,6 +62,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     CreatedAt = a.CreatedAt,
                     UpdatedAt = a.UpdatedAt
+
                 })
                 .FirstOrDefaultAsync();
 

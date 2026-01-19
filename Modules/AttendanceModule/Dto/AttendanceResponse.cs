@@ -14,6 +14,9 @@
 
         // Date
         public DateOnly Date { get; set; }
+        //public Boolean hasCheckedIn { get; set; }
+        public Boolean isForgotCheckIn { get; set; }
+        public Boolean isForgotCheckOut { get; set; }
 
         // Check In
         public DateTime? CheckInTime { get; set; }
