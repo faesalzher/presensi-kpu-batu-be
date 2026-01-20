@@ -1,0 +1,17 @@
+﻿name: Cut Off Check-In
+
+on:
+  schedule:
+    # 12:01 WIB = 05:01 UTC
+    - cron: "1 5 * * *"
+  workflow_dispatch: # 🔘 bisa run manual dari GitHub UI
+
+jobs:
+  cutoff-checkin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Cut Off Check-In API
+        run: |
+          curl -X POST "${{ secrets.API_BASE_URL }}/attendance/cutoff-checkin" \
+            -H "X-SCHEDULER-SECRET: ${{ secrets.SCHEDULER_SECRET }}"

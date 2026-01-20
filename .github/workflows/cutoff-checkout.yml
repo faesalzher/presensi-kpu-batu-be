@@ -1,0 +1,17 @@
+﻿name: Cut Off Check-Out
+
+on:
+  schedule:
+    # 18:01 WIB = 11:01 UTC
+    - cron: "1 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  cutoff-checkout:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Cut Off Check-Out API
+        run: |
+          curl -X POST "${{ secrets.API_BASE_URL }}/attendance/cutoff-checkout" \
+            -H "X-SCHEDULER-SECRET: ${{ secrets.SCHEDULER_SECRET }}"
