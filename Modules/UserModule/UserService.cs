@@ -1,8 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using presensi_kpu_batu_be.Modules.User.Dto;
+using presensi_kpu_batu_be.Modules.UserModule.Dto;
 
 
-namespace presensi_kpu_batu_be.Modules.User
+namespace presensi_kpu_batu_be.Modules.UserModule
 {
     public class UserService : IUserService
     {
@@ -39,6 +39,15 @@ namespace presensi_kpu_batu_be.Modules.User
                 )
                 .FirstOrDefaultAsync();
         }
+
+        public async Task<List<User>> GetActiveUsersAsync()
+        {
+            return await _context.Users
+                .Where(u => u.IsActive)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
 
     }
 }

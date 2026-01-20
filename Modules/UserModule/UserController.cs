@@ -1,10 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Npgsql;
-using presensi_kpu_batu_be.Modules.User;
-using presensi_kpu_batu_be.Modules.User.Dto;
+using presensi_kpu_batu_be.Modules.UserModule;
+using presensi_kpu_batu_be.Modules.UserModule.Dto;
 
 [ApiController]
 [Route("user")]

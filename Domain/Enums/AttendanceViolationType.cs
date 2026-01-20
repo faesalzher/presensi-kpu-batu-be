@@ -2,14 +2,19 @@
 {
     public enum AttendanceViolationType
     {
-        LATE,
+        LATE,               // 2.5%
+        NOT_CHECKED_IN,     // 2.5%
+        NOT_CHECKED_OUT,    // 2.5%
+        ABSENT,         // 🔥 5%,
         EARLY_DEPARTURE
     }
+
 
     public enum ViolationSource
     {
         CHECK_IN,
-        CHECK_OUT
+        CHECK_OUT,
+        SYSTEM
     }
 
 }

@@ -229,4 +229,74 @@ public class AttendanceController : ControllerBase
 
     //    return fileMeta.Guid;
     //}
+
+    // =======================================
+    // SYSTEM — CUT OFF CHECK-IN (12:00 WIB)
+    // POST /attendance/cutoff-checkin
+    // =======================================
+    [HttpPost("cutoff-checkin")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CutOffCheckIn(
+        [FromHeader(Name = "X-SCHEDULER-SECRET")] string? secret)
+    {
+        if (!IsSchedulerAuthorized(secret))
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid scheduler secret"
+            });
+
+        await _attendanceService.RunCutOffCheckInAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Cut off check-in executed successfully"
+        });
+    }
+
+
+    // =======================================
+    // SYSTEM — CUT OFF CHECK-OUT (18:00 WIB)
+    // POST /attendance/cutoff-checkout
+    // =======================================
+    [HttpPost("cutoff-checkout")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CutOffCheckOut(
+        [FromHeader(Name = "X-SCHEDULER-SECRET")] string? secret)
+    {
+        if (!IsSchedulerAuthorized(secret))
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid scheduler secret"
+            });
+
+        await _attendanceService.RunCutOffCheckOutAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Cut off check-out executed successfully"
+        });
+    }
+
+
+
+    private bool IsSchedulerAuthorized(string? secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret))
+            return false;
+
+        var expected = HttpContext.RequestServices
+            .GetRequiredService<IConfiguration>()
+            .GetValue<string>("Scheduler:Secret");
+
+        if (string.IsNullOrWhiteSpace(expected))
+            return false;
+
+        return string.Equals(secret, expected, StringComparison.Ordinal);
+    }
+
+
 }

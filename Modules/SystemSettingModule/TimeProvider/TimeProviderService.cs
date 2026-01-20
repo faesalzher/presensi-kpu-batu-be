@@ -20,7 +20,13 @@ public class TimeProviderService : ITimeProviderService
         {
             var mock = await _generalSettingService.GetAsync("MOCK_DATETIME");
 
-            return DateTime.Parse(mock);
+            if (DateTimeOffset.TryParse(mock, out var dto))
+            {
+                // 🔥 KUNCI UTAMA
+                return dto.UtcDateTime;
+            }
+
+            throw new Exception("Invalid MOCK_DATETIME format");
         }
 
         // REAL MODE

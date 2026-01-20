@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
-using presensi_kpu_batu_be.Modules.User;
+using presensi_kpu_batu_be.Modules.UserModule;
 using System;
 using System.Text;
 
