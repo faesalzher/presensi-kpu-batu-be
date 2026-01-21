@@ -32,7 +32,8 @@
 
         // Work
         public decimal? WorkHours { get; set; }
-        public WorkingStatus Status { get; set; } = default!;
+        public string? Status { get; set; } = default!;
+        public string? ViolationNotes { get; set; }
 
         // Audit (opsional kirim ke FE)
         public DateTime CreatedAt { get; set; }

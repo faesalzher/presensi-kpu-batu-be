@@ -12,6 +12,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         Task<AttendanceResponse> CheckOut(Guid userId, CheckOutDto checkOutDto);
         Task<SchedulerDebugResponse> RunCutOffCheckInAsync();
         Task<SchedulerDebugResponse> RunCutOffCheckOutAsync();
+        Task<List<AttendanceResponse>> GetAttendanceAsync(AttendanceQueryParams query);
+        Task<AttendanceResponse?> GetAttendanceByGuidAsync(Guid attendanceGuid, Guid userId);
     }
 
 

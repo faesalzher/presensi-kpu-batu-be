@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using System.Security.Claims;
@@ -298,6 +299,37 @@ public class AttendanceController : ControllerBase
             return false;
 
         return string.Equals(secret, expected, StringComparison.Ordinal);
+    }
+
+    // GET /attendance/my-records
+    [HttpGet("my-records")]
+    public async Task<IActionResult> GetMyAttendanceRecords(
+        [FromQuery] AttendanceQueryParams query)
+    {
+        var userGuid = GetUserGuid();
+
+        //if (string.IsNullOrEmpty(ConvertuserGuid))
+        //    return Unauthorized("User not authenticated");
+
+        query.UserId = userGuid;
+
+        var result = await _attendanceService.GetAttendanceAsync(query);
+        return Ok(result);
+    }
+
+
+    //get-detail-attendance
+    [HttpGet("{guid}")]
+    public async Task<IActionResult> GetAttendanceDetail(Guid guid)
+    {
+        var userId = GetUserGuid();
+
+        var result = await _attendanceService.GetAttendanceByGuidAsync(guid, userId);
+
+        if (result == null)
+            return NotFound("Attendance not found");
+
+        return Ok(result);
     }
 
 

@@ -18,7 +18,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         private readonly ITimeProviderService _timeProviderService;
         private readonly IUserService _userService;
 
-        
+
         public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IDepartmentService departmentService, IGeneralSettingService settingService
             , ITimeProviderService timeProvidersService, IUserService userService)
         {
@@ -62,7 +62,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     CheckOutNotes = a.CheckOutNotes,
 
                     WorkHours = a.WorkHours,
-                    Status = a.Status,
+                    Status = a.Status.ToString(),
 
                     CreatedAt = a.CreatedAt,
                     UpdatedAt = a.UpdatedAt
@@ -192,7 +192,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                         PenaltyPercent = 2.5m,
                         OccurredAt = nowUtc,
                         Notes = lateMinutes <= lateToleranceMinutes
-                            ? "Terlambat (dalam batas toleransi, menunggu kompensasi)"
+                            ? "Terlambat (dalam batas toleransi, tidak dikompensasi)"
                             : "Terlambat masuk kerja"
                     });
 
@@ -208,7 +208,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 CheckInTime = attendance.CheckInTime,
                 CheckOutTime = attendance.CheckOutTime,
                 WorkHours = attendance.WorkHours,
-                Status = attendance.Status
+                Status = attendance.Status.ToString()
             };
         }
 
@@ -364,7 +364,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 CheckInTime = attendance.CheckInTime,
                 CheckOutTime = attendance.CheckOutTime,
                 WorkHours = attendance.WorkHours,
-                Status = attendance.Status
+                Status = attendance.Status.ToString(),
             };
         }
 
@@ -389,13 +389,13 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync()
         {
 
-                // ======================================================
-                // VALIDASI HARI KERJA
-                // ======================================================
-                var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
+            // ======================================================
+            // VALIDASI HARI KERJA
+            // ======================================================
+            var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
 
-                if (workingDay.IsHoliday)
-                    throw new BadRequestException(workingDay.Message);
+            if (workingDay.IsHoliday)
+                throw new BadRequestException(workingDay.Message);
 
             var nowUtc = await _timeProviderService.NowAsync();
             var tz = GetTimeZone();
@@ -465,7 +465,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     Source = ViolationSource.CHECK_IN,
                     PenaltyPercent = 2.5m,
                     OccurredAt = nowUtc,
-                    Notes = "Tidak melakukan absen masuk sampai cut off"
+                    Notes = "Tidak presensi masuk"
                 });
 
                 response.AttendanceCreated++;
@@ -595,7 +595,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             Source = ViolationSource.SYSTEM,
                             PenaltyPercent = 5.0m,
                             OccurredAt = nowUtc,
-                            Notes = "Tidak melakukan presensi masuk dan pulang"
+                            Notes = "Tidak presensi masuk dan pulang"
                         });
 
                         response.ViolationsAdded++;
@@ -627,7 +627,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             Source = ViolationSource.CHECK_OUT,
                             PenaltyPercent = 2.5m,
                             OccurredAt = nowUtc,
-                            Notes = "Tidak melakukan absen pulang sampai cut off"
+                            Notes = "Tidak presensi pulang"
                         });
 
                         response.ViolationsAdded++;
@@ -642,6 +642,121 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             return response;
         }
 
+
+        public async Task<List<AttendanceResponse>> GetAttendanceAsync(
+      AttendanceQueryParams query)
+        {
+            var q = _context.Attendance
+                .AsNoTracking()
+                .AsQueryable();
+
+            // 🔐 user wajib
+            if (query.UserId.HasValue)
+            {
+                q = q.Where(x => x.UserId == query.UserId.Value);
+            }
+
+            // 📅 filter tanggal
+            if (!string.IsNullOrEmpty(query.StartDate))
+            {
+                var start = DateOnly.Parse(query.StartDate);
+                q = q.Where(x => x.Date >= start);
+            }
+
+            if (!string.IsNullOrEmpty(query.EndDate))
+            {
+                var end = DateOnly.Parse(query.EndDate);
+                q = q.Where(x => x.Date <= end);
+            }
+
+            // 🏢 department
+            if (query.DepartmentId.HasValue)
+            {
+                q = q.Where(x => x.DepartmentId == query.DepartmentId.Value);
+            }
+
+
+
+            //return await q
+            //    .OrderByDescending(x => x.Date)
+            //    .ToListAsync();
+
+            return await q
+            .OrderByDescending(a => a.Date)
+            .Select(a => new AttendanceResponse
+            {
+                Guid = a.Guid,
+                UserId = a.UserId,
+
+                DepartmentId = a.DepartmentId,
+                DepartmentName = a.Department != null ? a.Department.Name : null,
+
+                Date = a.Date,
+
+                isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
+                isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
+
+                CheckInTime = a.CheckInTime,
+                CheckInLocation = a.CheckInLocation,
+                CheckInPhotoId = a.CheckInPhotoId,
+                CheckInNotes = a.CheckInNotes,
+
+                CheckOutTime = a.CheckOutTime,
+                CheckOutLocation = a.CheckOutLocation,
+                CheckOutPhotoId = a.CheckOutPhotoId,
+                CheckOutNotes = a.CheckOutNotes,
+
+                WorkHours = a.WorkHours,
+                Status = a.Status.ToString(),
+
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt
+            })
+            .ToListAsync();
+
+        }
+
+        public async Task<AttendanceResponse?> GetAttendanceByGuidAsync(
+    Guid attendanceGuid,
+    Guid userId)
+        {
+            return await _context.Attendance
+                .AsNoTracking()
+                .Where(a => a.Guid == attendanceGuid && a.UserId == userId)
+                .Select(a => new AttendanceResponse
+                {
+                    Guid = a.Guid,
+                    UserId = a.UserId,
+
+                    DepartmentId = a.DepartmentId,
+                    DepartmentName = a.Department != null ? a.Department.Name : null,
+
+                    Date = a.Date,
+
+                    isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
+                    isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
+
+                    CheckInTime = a.CheckInTime,
+                    CheckInLocation = a.CheckInLocation,
+                    CheckInPhotoId = a.CheckInPhotoId,
+                    CheckInNotes = a.CheckInNotes,
+
+                    CheckOutTime = a.CheckOutTime,
+                    CheckOutLocation = a.CheckOutLocation,
+                    CheckOutPhotoId = a.CheckOutPhotoId,
+                    CheckOutNotes = a.CheckOutNotes,
+
+                    WorkHours = a.WorkHours,
+                    Status = a.Status.ToString(), // 🔥 ENUM → STRING
+                    ViolationNotes = string.Join(
+                        ", ",
+                        a.Violation.Select(v => v.Notes)
+                    ),
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+        }
 
 
     }
