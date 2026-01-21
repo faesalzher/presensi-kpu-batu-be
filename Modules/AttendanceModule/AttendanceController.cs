@@ -246,12 +246,13 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
-        await _attendanceService.RunCutOffCheckInAsync();
+        var result = await _attendanceService.RunCutOffCheckInAsync();
 
         return Ok(new
         {
             success = true,
-            message = "Cut off check-in executed successfully"
+            message = "Cut off check-in executed successfully",
+            data = result
         });
     }
 
@@ -272,12 +273,13 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
-        await _attendanceService.RunCutOffCheckOutAsync();
+        var result = await _attendanceService.RunCutOffCheckOutAsync();
 
         return Ok(new
         {
             success = true,
-            message = "Cut off check-out executed successfully"
+            message = "Cut off check-out executed successfully",
+            data = result
         });
     }
 

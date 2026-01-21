@@ -356,22 +356,28 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         }
 
 
-        public async Task RunCutOffCheckInAsync()
+        public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync()
         {
             var nowUtc = await _timeProviderService.NowAsync();
             var tz = GetTimeZone();
-
             var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
             var today = DateOnly.FromDateTime(nowLocal);
 
+            var response = new SchedulerDebugResponse
+            {
+                Scheduler = "CUT_OFF_CHECKIN",
+                Date = today,
+                ExecutedAtUtc = nowUtc
+            };
+
             if (nowLocal.TimeOfDay <= new TimeSpan(12, 0, 0))
-                return;
+                return response;
 
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
             var userIds = users.Select(u => u.Guid).ToList();
 
-            // 2️⃣ Ambil attendance hari ini SEKALI
+            // 2️⃣ Ambil attendance hari ini
             var existingAttendances = await _context.Attendance
                 .Where(a => a.Date == today && userIds.Contains(a.UserId))
                 .ToListAsync();
@@ -382,7 +388,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var newAttendances = new List<Attendance>();
             var newViolations = new List<AttendanceViolation>();
 
-            // 3️⃣ Loop di memory (murah)
             foreach (var user in users)
             {
                 if (attendanceByUserId.ContainsKey(user.Guid))
@@ -412,33 +417,45 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     OccurredAt = nowUtc,
                     Notes = "Tidak melakukan absen masuk sampai cut off"
                 });
+
+                response.AttendanceCreated++;
+                response.ViolationsAdded++;
+                response.AffectedUserIds.Add(user.Guid);
             }
 
-            // 4️⃣ Simpan SEKALI (atomic)
             if (newAttendances.Any())
             {
                 _context.Attendance.AddRange(newAttendances);
                 _context.AttendanceViolation.AddRange(newViolations);
-
                 await _context.SaveChangesAsync();
             }
+
+            return response;
         }
 
-        public async Task RunCutOffCheckOutAsync()
+
+        public async Task<SchedulerDebugResponse> RunCutOffCheckOutAsync()
         {
             var nowUtc = await _timeProviderService.NowAsync();
             var tz = GetTimeZone();
             var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
             var today = DateOnly.FromDateTime(nowLocal);
 
+            var response = new SchedulerDebugResponse
+            {
+                Scheduler = "CUT_OFF_CHECKOUT",
+                Date = today,
+                ExecutedAtUtc = nowUtc
+            };
+
             if (nowLocal.TimeOfDay < new TimeSpan(18, 0, 0))
-                return;
+                return response;
 
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
             var userIds = users.Select(u => u.Guid).ToList();
 
-            // 2️⃣ Ambil attendance hari ini SEKALI
+            // 2️⃣ Ambil attendance hari ini
             var attendances = await _context.Attendance
                 .Where(a => a.Date == today && userIds.Contains(a.UserId))
                 .ToListAsync();
@@ -446,9 +463,17 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var attendanceByUserId = attendances
                 .ToDictionary(a => a.UserId, a => a);
 
+            // preload violation hari ini
+            var violations = await _context.AttendanceViolation
+                .Where(v => attendances.Select(a => a.Guid).Contains(v.AttendanceId))
+                .ToListAsync();
+
+            var violationsByAttendanceId = violations
+                .GroupBy(v => v.AttendanceId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             var violationsToAdd = new List<AttendanceViolation>();
 
-            // 3️⃣ Proses semua user aktif
             foreach (var userId in userIds)
             {
                 // ===============================
@@ -469,67 +494,67 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     };
 
                     _context.Attendance.Add(attendance);
+                    response.AttendanceCreated++;
+                    response.AffectedUserIds.Add(userId);
                     continue;
                 }
 
                 // ===============================
                 // CASE 2: CHECK-IN ❌ & CHECK-OUT ❌
                 // ===============================
-                if (attendance.CheckInTime == null &&
-                attendance.CheckOutTime == null)
+                if (attendance.CheckInTime == null && attendance.CheckOutTime == null)
                 {
-                    // 1️⃣ hapus violation parsial
-                    var partialViolations = await _context.AttendanceViolation
-                        .Where(v =>
-                            v.AttendanceId == attendance.Guid &&
-                            (v.Type == AttendanceViolationType.NOT_CHECKED_IN ||
-                             v.Type == AttendanceViolationType.NOT_CHECKED_OUT))
-                        .ToListAsync();
+                    if (violationsByAttendanceId.TryGetValue(attendance.Guid, out var existing))
+                    {
+                        var partials = existing
+                            .Where(v => v.Type == AttendanceViolationType.NOT_CHECKED_IN ||
+                                        v.Type == AttendanceViolationType.NOT_CHECKED_OUT)
+                            .ToList();
 
-                    if (partialViolations.Any())
-                        _context.AttendanceViolation.RemoveRange(partialViolations);
+                        if (partials.Any())
+                        {
+                            _context.AttendanceViolation.RemoveRange(partials);
+                            response.ViolationsRemoved += partials.Count;
+                        }
+                    }
 
-                    // 2️⃣ update attendance
                     attendance.Status = WorkingStatus.ABSENT;
                     attendance.UpdatedAt = nowUtc;
+                    response.AttendanceUpdated++;
+                    response.AffectedUserIds.Add(attendance.UserId);
 
-                    // 3️⃣ insert violation ABSENT (5%)
-                    var absentViolationExists = await _context.AttendanceViolation
-                        .AnyAsync(v =>
-                            v.AttendanceId == attendance.Guid &&
-                            v.Type == AttendanceViolationType.ABSENT);
-
-                    if (!absentViolationExists)
+                    var hasAbsent = existing?.Any(v => v.Type == AttendanceViolationType.ABSENT) == true;
+                    if (!hasAbsent)
                     {
-                        _context.AttendanceViolation.Add(new AttendanceViolation
+                        violationsToAdd.Add(new AttendanceViolation
                         {
                             Guid = Guid.NewGuid(),
                             AttendanceId = attendance.Guid,
                             Type = AttendanceViolationType.ABSENT,
-                            Source = ViolationSource.SYSTEM, // 🔥 tambahkan SYSTEM
+                            Source = ViolationSource.SYSTEM,
                             PenaltyPercent = 5.0m,
                             OccurredAt = nowUtc,
                             Notes = "Tidak melakukan presensi masuk dan pulang"
                         });
+
+                        response.ViolationsAdded++;
                     }
 
                     continue;
                 }
 
-
                 // ===============================
                 // CASE 3: CHECK-IN ✔ & CHECK-OUT ❌
                 // ===============================
-                if (attendance.CheckInTime != null &&
-                    attendance.CheckOutTime == null)
+                if (attendance.CheckInTime != null && attendance.CheckOutTime == null)
                 {
                     attendance.Status = WorkingStatus.INCOMPLETE;
                     attendance.UpdatedAt = nowUtc;
+                    response.AttendanceUpdated++;
+                    response.AffectedUserIds.Add(attendance.UserId);
 
-                    var hasViolation = await _context.AttendanceViolation
-                        .AnyAsync(v =>
-                            v.AttendanceId == attendance.Guid &&
-                            v.Type == AttendanceViolationType.NOT_CHECKED_OUT);
+                    var hasViolation = violationsByAttendanceId.TryGetValue(attendance.Guid, out var vlist)
+                        && vlist.Any(v => v.Type == AttendanceViolationType.NOT_CHECKED_OUT);
 
                     if (!hasViolation)
                     {
@@ -543,20 +568,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             OccurredAt = nowUtc,
                             Notes = "Tidak melakukan absen pulang sampai cut off"
                         });
+
+                        response.ViolationsAdded++;
                     }
                 }
-
-                // CASE 4: CHECK-IN ✔ & CHECK-OUT ✔
-                // → tidak melakukan apa-apa
             }
-
-            // 4️⃣ Simpan SEKALI & atomic
 
             if (violationsToAdd.Any())
                 _context.AttendanceViolation.AddRange(violationsToAdd);
 
             await _context.SaveChangesAsync();
+            return response;
         }
+
 
 
     }
