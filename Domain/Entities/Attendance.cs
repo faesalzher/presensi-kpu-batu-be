@@ -56,6 +56,9 @@ namespace presensi_kpu_batu_be.Domain.Entities
         [Column("status")]
         public WorkingStatus Status { get; set; } = default!;
 
+        [Column("late_minutes")]
+        public int? LateMinutes { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
