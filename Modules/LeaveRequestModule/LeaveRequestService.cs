@@ -36,4 +36,18 @@ public class LeaveRequestService : ILeaveRequestService
             LeaveType = leave.Type
         };
     }
+
+    public async Task<List<Guid>> GetUserIdsOnLeaveAsync(DateOnly date)
+    {
+        return await _context.LeaveRequest
+            .AsNoTracking()
+            .Where(l =>
+                l.Status == LeaveRequestStatus.APPROVED &&
+                l.StartDate <= date &&
+                l.EndDate >= date)
+            .Select(l => l.UserId)
+            .Distinct()
+            .ToListAsync();
+    }
+
 }

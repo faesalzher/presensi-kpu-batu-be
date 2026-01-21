@@ -248,6 +248,16 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 throw new BadRequestException(workingDay.Message);
 
             // ======================================================
+            // 3. CEK CUTI
+            // ======================================================
+            var leaveStatus = await _leaveRequestsService
+                .CheckUserLeaveStatusAsync(userId, today);
+
+            if (leaveStatus.IsOnLeave)
+                throw new BadRequestException("You are on leave today");
+
+
+            // ======================================================
             // 2. AMBIL ATTENDANCE
             // ======================================================
             var attendance = await _context.Attendance
@@ -378,6 +388,15 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
         public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync()
         {
+
+                // ======================================================
+                // VALIDASI HARI KERJA
+                // ======================================================
+                var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
+
+                if (workingDay.IsHoliday)
+                    throw new BadRequestException(workingDay.Message);
+
             var nowUtc = await _timeProviderService.NowAsync();
             var tz = GetTimeZone();
             var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
@@ -390,12 +409,23 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 ExecutedAtUtc = nowUtc
             };
 
+
+            //penjagaan 12 siang
             if (nowLocal.TimeOfDay <= new TimeSpan(12, 0, 0))
                 return response;
-
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
-            var userIds = users.Select(u => u.Guid).ToList();
+            var usersToProcess = users.Select(u => u.Guid).ToList();
+
+            // 2️⃣ Ambil user yang CUTI hari ini
+            var usersOnLeave =
+                await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
+
+            // 3️⃣ Filter → hanya yang WAJIB presensi
+            var userIds = usersToProcess
+                .Except(usersOnLeave)
+                .ToList();
+
 
             // 2️⃣ Ambil attendance hari ini
             var existingAttendances = await _context.Attendance
@@ -468,12 +498,23 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 ExecutedAtUtc = nowUtc
             };
 
+
+            //penjagaan 18 malam
             if (nowLocal.TimeOfDay < new TimeSpan(18, 0, 0))
                 return response;
 
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
-            var userIds = users.Select(u => u.Guid).ToList();
+            var usersToProcess = users.Select(u => u.Guid).ToList();
+
+            // 2️⃣ Ambil user yang CUTI hari ini
+            var usersOnLeave =
+                await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
+
+            // 3️⃣ Filter → hanya yang WAJIB presensi
+            var userIds = usersToProcess
+                .Except(usersOnLeave)
+                .ToList();
 
             // 2️⃣ Ambil attendance hari ini
             var attendances = await _context.Attendance
