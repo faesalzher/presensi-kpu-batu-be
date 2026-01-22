@@ -1,8 +1,10 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
+using System.Diagnostics;
 using System.Security.Claims;
 
 [ApiController]
@@ -12,13 +14,19 @@ public class AttendanceController : ControllerBase
 {
     private readonly IAttendanceService _attendanceService;
     //private readonly IFilesService _filesService;
+    private readonly AppDbContext _context;
+    private readonly ILogger<AttendanceController> _logger;
 
     public AttendanceController(
-        IAttendanceService attendanceService
+        IAttendanceService attendanceService,
+        AppDbContext context,
+         ILogger<AttendanceController> logger
         //IFilesService filesService
         )
     {
+        _context = context;
         _attendanceService = attendanceService;
+        _logger = logger;
         //_filesService = filesService;
     }
 
@@ -232,7 +240,7 @@ public class AttendanceController : ControllerBase
     //}
 
     // =======================================
-    // SYSTEM � CUT OFF CHECK-IN (12:00 WIB)
+    // SYSTEM — CUT OFF CHECK-IN (12:00 WIB)
     // POST /attendance/cutoff-checkin
     // =======================================
     [HttpPost("cutoff-checkin")]
@@ -247,6 +255,13 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
+        var sw = Stopwatch.StartNew();
+        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+        _logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
+
+        // ⏱️ kasih waktu DB + pool stabil
+        await Task.Delay(15000);
+
         var result = await _attendanceService.RunCutOffCheckInAsync();
 
         return Ok(new
@@ -259,7 +274,7 @@ public class AttendanceController : ControllerBase
 
 
     // =======================================
-    // SYSTEM � CUT OFF CHECK-OUT (18:00 WIB)
+    // SYSTEM — CUT OFF CHECK-OUT (18:00 WIB)
     // POST /attendance/cutoff-checkout
     // =======================================
     [HttpPost("cutoff-checkout")]
@@ -267,6 +282,7 @@ public class AttendanceController : ControllerBase
     public async Task<IActionResult> CutOffCheckOut(
         [FromHeader(Name = "X-SCHEDULER-SECRET")] string? secret)
     {
+      
         if (!IsSchedulerAuthorized(secret))
             return Unauthorized(new
             {
@@ -274,7 +290,16 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
+        // 🔥 warm up DB (bangunin Supabase)
+        var sw = Stopwatch.StartNew();
+        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+        _logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
+
+        // ⏱️ kasih waktu DB + pool stabil
+        await Task.Delay(15000);
+
         var result = await _attendanceService.RunCutOffCheckOutAsync();
+
 
         return Ok(new
         {
