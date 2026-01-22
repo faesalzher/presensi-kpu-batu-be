@@ -13,5 +13,5 @@ jobs:
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
-          echo "Pinging $API_BASE_URL/health/db"
-          curl -m 30 "$API_BASE_URL/health/db"
+          echo "Pinging $API_BASE_URL/auth/health/db"
+          curl -m 30 "$API_BASE_URL/auth/health/db"
