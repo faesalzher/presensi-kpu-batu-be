@@ -2,7 +2,7 @@
 
 on:
   schedule:
-    - cron: "46 23 * * *"     # per jam dulu
+    - cron: "5 17 * * *"     # per jam dulu
   workflow_dispatch:        # biar bisa run manual
 
 jobs:
