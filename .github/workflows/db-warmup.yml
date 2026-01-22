@@ -14,4 +14,4 @@ jobs:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
           echo "Pinging $API_BASE_URL/health/db"
-          curl -s -m 30 "$API_BASE_URL/health/db"
+          curl -m 30 "$API_BASE_URL/health/db"
