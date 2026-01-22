@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace presensi_kpu_batu_be.Domain.Entities
 {
     [Table("department")]
-    public class Department
+    public class Department : BaseEntity
     {
         [Key]
         [Column("guid")]

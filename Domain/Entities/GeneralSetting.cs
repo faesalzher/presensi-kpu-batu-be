@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace presensi_kpu_batu_be.Domain.Entities;
 
 [Table("general_setting")]
-public class GeneralSetting
+public class GeneralSetting : BaseEntity
 {
     [Key]
     [Column("guid")]

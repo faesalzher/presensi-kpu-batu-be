@@ -1,10 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
-using System.Diagnostics;
 using System.Security.Claims;
 
 [ApiController]

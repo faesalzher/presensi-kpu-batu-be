@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace presensi_kpu_batu_be.Domain.Entities
 {
     [Table("attendance")]
-    public class Attendance
+    public class Attendance : BaseEntity
     {
         [Key]
         [Column("guid")]
@@ -58,12 +58,6 @@ namespace presensi_kpu_batu_be.Domain.Entities
 
         [Column("late_minutes")]
         public int? LateMinutes { get; set; }
-
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
-
-        [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
 
         // =====================
         // Navigation Properties

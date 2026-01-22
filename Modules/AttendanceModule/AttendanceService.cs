@@ -48,8 +48,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     Date = a.Date,
 
-                    isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
-                    isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
+                    isForgotCheckIn = a.Status == WorkingStatus.PROBLEM && a.CheckInTime == null,
+                    isForgotCheckOut = a.Status == WorkingStatus.PROBLEM && a.CheckOutTime == null,
 
                     CheckInTime = a.CheckInTime,
                     CheckInLocation = a.CheckInLocation,
@@ -63,10 +63,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     WorkHours = a.WorkHours,
                     Status = a.Status.ToString(),
-
-                    CreatedAt = a.CreatedAt,
-                    UpdatedAt = a.UpdatedAt
-
                 })
                 .FirstOrDefaultAsync();
 
@@ -110,7 +106,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 .CheckUserLeaveStatusAsync(userId, today);
 
             if (leaveStatus.IsOnLeave)
-                throw new BadRequestException("You are on leave today");
+                throw new BadRequestException("Anda sedang cuti hari ini");
 
             // ======================================================
             // 4. AMBIL ATTENDANCE
@@ -119,7 +115,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == today);
 
             if (attendance?.CheckInTime != null)
-                throw new BadRequestException("Already checked in");
+                throw new BadRequestException("Sudah Checkin");
 
             // ======================================================
             // 5. HITUNG TELAT
@@ -148,12 +144,10 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     Guid = Guid.NewGuid(),
                     UserId = userId,
                     Date = today,
-                    Status = WorkingStatus.PRESENT,
+                    Status = lateMinutes > 0 ? WorkingStatus.PROBLEM: WorkingStatus.PRESENT,
                     CheckInTime = nowUtc,
                     CheckInNotes = dto.Notes,
                     LateMinutes = lateMinutes,
-                    CreatedAt = nowUtc,
-                    UpdatedAt = nowUtc
                 };
                 _context.Attendance.Add(attendance);
             }
@@ -162,7 +156,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 attendance.CheckInTime = nowUtc;
                 attendance.CheckInNotes = dto.Notes;
                 attendance.LateMinutes = lateMinutes;
-                attendance.UpdatedAt = nowUtc;
             }
 
             await _context.SaveChangesAsync();
@@ -254,7 +247,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 .CheckUserLeaveStatusAsync(userId, today);
 
             if (leaveStatus.IsOnLeave)
-                throw new BadRequestException("You are on leave today");
+                throw new BadRequestException("Anda sedang cuti hari ini");
 
 
             // ======================================================
@@ -263,18 +256,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var attendance = await _context.Attendance
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == today);
 
-            if (attendance == null || attendance.CheckInTime == null)
+            if (attendance == null)
                 throw new BadRequestException("Invalid attendance data");
 
             if (attendance.CheckOutTime != null)
-                throw new BadRequestException("Already checked out today");
+                throw new BadRequestException("Sudah checkout");
 
             // ======================================================
             // 3. SIMPAN CHECK-OUT & JAM KERJA
             // ======================================================
             attendance.CheckOutTime = nowUtc;
             attendance.CheckOutNotes = dto.Notes ?? string.Empty;
-            attendance.WorkHours = Math.Round(
+            if (attendance.CheckInTime != null)
+                attendance.WorkHours = Math.Round(
                 (decimal)(nowUtc - attendance.CheckInTime.Value).TotalHours, 2);
 
             // ======================================================
@@ -298,15 +292,26 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var toleranceLimit =
                 workStartLocal.AddMinutes(lateToleranceMinutes);
 
-            var checkInLocal =
-                TimeZoneInfo.ConvertTimeFromUtc(attendance.CheckInTime.Value, tz);
+
+            DateTime? checkInLocal = null;
+
+            if (attendance.CheckInTime.HasValue)
+            {
+                checkInLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                    attendance.CheckInTime.Value,
+                    tz
+                );
+            }
 
             bool isLate =
+                attendance.CheckInTime.HasValue &&
                 attendance.LateMinutes.HasValue &&
                 attendance.LateMinutes.Value > 0;
 
             bool withinTolerance =
-                isLate && checkInLocal <= toleranceLimit;
+                isLate &&
+                checkInLocal.HasValue &&
+                checkInLocal.Value <= toleranceLimit;
 
             // ======================================================
             // 5. HAPUS VIOLATION TELAT JIKA KOMPENSASI TERPENUHI
@@ -337,6 +342,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 // ======================================================
                 if (nowLocal < workEndLocal)
                 {
+                    attendance.Status = WorkingStatus.PROBLEM;
                     _context.AttendanceViolation.Add(new AttendanceViolation
                     {
                         Guid = Guid.NewGuid(),
@@ -350,7 +356,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 }
             }
 
-            attendance.UpdatedAt = nowUtc;
             await _context.SaveChangesAsync();
 
             // ======================================================
@@ -448,11 +453,9 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     Guid = Guid.NewGuid(),
                     UserId = user.Guid,
                     Date = today,
-                    Status = WorkingStatus.INCOMPLETE,
+                    Status = WorkingStatus.PROBLEM,
                     CheckInTime = null,
                     CheckOutTime = null,
-                    CreatedAt = nowUtc,
-                    UpdatedAt = nowUtc
                 };
 
                 newAttendances.Add(attendance);
@@ -550,8 +553,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                         Status = WorkingStatus.ABSENT,
                         CheckInTime = null,
                         CheckOutTime = null,
-                        CreatedAt = nowUtc,
-                        UpdatedAt = nowUtc
                     };
 
                     _context.Attendance.Add(attendance);
@@ -580,7 +581,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     }
 
                     attendance.Status = WorkingStatus.ABSENT;
-                    attendance.UpdatedAt = nowUtc;
                     response.AttendanceUpdated++;
                     response.AffectedUserIds.Add(attendance.UserId);
 
@@ -609,8 +609,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 // ===============================
                 if (attendance.CheckInTime != null && attendance.CheckOutTime == null)
                 {
-                    attendance.Status = WorkingStatus.INCOMPLETE;
-                    attendance.UpdatedAt = nowUtc;
+                    attendance.Status = WorkingStatus.PROBLEM;
                     response.AttendanceUpdated++;
                     response.AffectedUserIds.Add(attendance.UserId);
 
@@ -693,8 +692,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 Date = a.Date,
 
-                isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
-                isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
+                isForgotCheckIn = a.Status == WorkingStatus.PROBLEM && a.CheckInTime == null,
+                isForgotCheckOut = a.Status == WorkingStatus.PROBLEM && a.CheckOutTime == null,
 
                 CheckInTime = a.CheckInTime,
                 CheckInLocation = a.CheckInLocation,
@@ -708,9 +707,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 WorkHours = a.WorkHours,
                 Status = a.Status.ToString(),
-
-                CreatedAt = a.CreatedAt,
-                UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
 
@@ -733,8 +729,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     Date = a.Date,
 
-                    isForgotCheckIn = a.Status == WorkingStatus.INCOMPLETE && a.CheckInTime == null,
-                    isForgotCheckOut = a.Status == WorkingStatus.INCOMPLETE && a.CheckOutTime == null,
+                    isForgotCheckIn = a.Status == WorkingStatus.PROBLEM && a.CheckInTime == null,
+                    isForgotCheckOut = a.Status == WorkingStatus.PROBLEM && a.CheckOutTime == null,
 
                     CheckInTime = a.CheckInTime,
                     CheckInLocation = a.CheckInLocation,
@@ -752,8 +748,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                         ", ",
                         a.Violation.Select(v => v.Notes)
                     ),
-                    CreatedAt = a.CreatedAt,
-                    UpdatedAt = a.UpdatedAt
                 })
                 .FirstOrDefaultAsync();
         }

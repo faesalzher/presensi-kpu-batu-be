@@ -35,8 +35,5 @@
         public string? Status { get; set; } = default!;
         public string? ViolationNotes { get; set; }
 
-        // Audit (opsional kirim ke FE)
-        public DateTime CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
     }
 }

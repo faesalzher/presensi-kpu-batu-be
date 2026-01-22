@@ -1,11 +1,15 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using presensi_kpu_batu_be.Domain.Entities;
 using presensi_kpu_batu_be.Infrastucture.Models;
+using presensi_kpu_batu_be.Modules.UserModule;
+using System.Security.Claims;
 
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    private readonly ICurrentUserService _currentUserService;
+    public AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUserService currentUserService) : base(options)
     {
+        _currentUserService = currentUserService;
     }
 
     public DbSet<Profile> Profiles { get; set; }
@@ -50,5 +54,31 @@ public class AppDbContext : DbContext
                    .HasConversion<string>();
         });
     }
+
+
+    public override async Task<int> SaveChangesAsync(
+    CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var username = _currentUserService.Username;
+
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UsrCrt = username;
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+                entry.Entity.UsrUpd = username;
+            }
+        }
+
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
 
 }

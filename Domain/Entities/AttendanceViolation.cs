@@ -5,7 +5,7 @@
     using System.ComponentModel.DataAnnotations.Schema;
 
     [Table("attendance_violation")]
-    public class AttendanceViolation
+    public class AttendanceViolation : BaseEntity
     {
         [Key]
         [Column("guid")]

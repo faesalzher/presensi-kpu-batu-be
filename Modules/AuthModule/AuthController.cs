@@ -10,8 +10,8 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
-    private readonly ILogger _logger;
-    public AuthController(AppDbContext context, IConfiguration configuration, ILogger logger)
+    private readonly ILogger<AuthController> _logger;
+    public AuthController(AppDbContext context, IConfiguration configuration, ILogger<AuthController> logger)
     {
         _context = context;
         _configuration = configuration;

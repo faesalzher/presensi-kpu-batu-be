@@ -1,8 +1,9 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using presensi_kpu_batu_be.Domain.Entities;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 [Table("leave_request")]
-public class LeaveRequest
+public class LeaveRequest : BaseEntity
 {
     [Key]
     [Column("guid")]
