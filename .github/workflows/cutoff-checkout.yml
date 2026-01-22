@@ -3,7 +3,7 @@
 on:
   schedule:
     # 18:01 WIB = 11:01 UTC
-    - cron: "1 11 * * *"
+    - cron: "5 17 * * *"
   workflow_dispatch:
 
 jobs:
