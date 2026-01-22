@@ -1,0 +1,17 @@
+﻿name: Keep API & DB Warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # tiap 10 menit
+  workflow_dispatch:        # biar bisa run manual
+
+jobs:
+  warmup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health DB
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          echo "Pinging $API_BASE_URL/health/db"
+          curl -s -m 30 "$API_BASE_URL/health/db"
