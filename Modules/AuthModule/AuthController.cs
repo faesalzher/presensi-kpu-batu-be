@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Npgsql;
+using System.Diagnostics;
 
 [ApiController]
 [Route("auth")]
@@ -10,11 +10,12 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
-
-    public AuthController(AppDbContext context, IConfiguration configuration)
+    private readonly ILogger _logger;
+    public AuthController(AppDbContext context, IConfiguration configuration, ILogger logger)
     {
         _context = context;
         _configuration = configuration;
+        _logger = logger;
     }
 
 
@@ -48,6 +49,28 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Health()
     {
         return Ok();
+    }
+
+    [HttpGet("health/db")]
+    [AllowAnonymous]
+    public async Task<IActionResult> HealthDb()
+    {
+        var sw = Stopwatch.StartNew();
+
+        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+
+        sw.Stop();
+
+        _logger.LogInformation(
+            "Health DB warm-up took {ElapsedMs} ms",
+            sw.ElapsedMilliseconds
+        );
+
+        return Ok(new
+        {
+            status = "OK",
+            warmupMs = sw.ElapsedMilliseconds
+        });
     }
 
 

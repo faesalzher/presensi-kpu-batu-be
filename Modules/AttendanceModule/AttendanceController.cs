@@ -255,9 +255,19 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
-        var sw = Stopwatch.StartNew();
-        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
-        _logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
+        //var sw = Stopwatch.StartNew();
+        //await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+        //_logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
+
+        if (!await WarmUpDatabaseAsync())
+        {
+            return StatusCode(503, new
+            {
+                success = false,
+                message = "Database not ready after retries"
+            });
+        }
+
 
         // ⏱️ kasih waktu DB + pool stabil
         await Task.Delay(15000);
@@ -290,10 +300,19 @@ public class AttendanceController : ControllerBase
                 message = "Invalid scheduler secret"
             });
 
-        // 🔥 warm up DB (bangunin Supabase)
-        var sw = Stopwatch.StartNew();
-        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
-        _logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
+        if (!await WarmUpDatabaseAsync())
+        {
+            return StatusCode(503, new
+            {
+                success = false,
+                message = "Database not ready after retries"
+            });
+        }
+
+        //// 🔥 warm up DB (bangunin Supabase)
+        //var sw = Stopwatch.StartNew();
+        //await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+        //_logger.LogInformation("DB warm-up took {ms} ms", sw.ElapsedMilliseconds);
 
         // ⏱️ kasih waktu DB + pool stabil
         await Task.Delay(15000);
@@ -309,6 +328,30 @@ public class AttendanceController : ControllerBase
         });
     }
 
+    private async Task<bool> WarmUpDatabaseAsync()
+    {
+        for (int i = 1; i <= 6; i++)
+        {
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+                _logger.LogInformation("DB warm-up success on attempt {attempt}", i);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "DB warm-up failed (attempt {attempt}), retrying...",
+                    i
+                );
+
+                await Task.Delay(10000); // 10 detik
+            }
+        }
+
+        return false;
+    }
 
 
     private bool IsSchedulerAuthorized(string? secret)
