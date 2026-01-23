@@ -51,7 +51,7 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
-    [HttpGet("health/db")]
+    [HttpPost("health/db")]
     [AllowAnonymous]
     public async Task<IActionResult> HealthDb()
     {
