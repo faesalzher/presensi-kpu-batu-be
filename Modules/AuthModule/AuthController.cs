@@ -57,7 +57,15 @@ public class AuthController : ControllerBase
     {
         var sw = Stopwatch.StartNew();
 
-        await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+
+        if (!await WarmUpDatabaseAsync())
+        {
+            return StatusCode(503, new
+            {
+                success = false,
+                message = "Database not ready after retries"
+            });
+        }
 
         sw.Stop();
 
@@ -71,6 +79,31 @@ public class AuthController : ControllerBase
             status = "OK",
             warmupMs = sw.ElapsedMilliseconds
         });
+    }
+
+    private async Task<bool> WarmUpDatabaseAsync()
+    {
+        for (int i = 1; i <= 6; i++)
+        {
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync("SELECT 1");
+                _logger.LogInformation("DB warm-up success on attempt {attempt}", i);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "DB warm-up failed (attempt {attempt}), retrying...",
+                    i
+                );
+
+                await Task.Delay(10000); // 10 detik
+            }
+        }
+
+        return false;
     }
 
 
