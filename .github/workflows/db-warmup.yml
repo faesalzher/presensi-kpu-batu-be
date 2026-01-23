@@ -2,16 +2,14 @@
 
 on:
   schedule:
-    - cron: "5 17 * * *"     # per jam dulu
-  workflow_dispatch:        # biar bisa run manual
+    - cron: "20 2 * * *"
+  workflow_dispatch:
 
 jobs:
-  warmup:
+  cutoff-checkout:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Ping health DB
-        env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      - name:  Ping health DB
         run: |
-          echo "Pinging $API_BASE_URL/auth/health/db"
-          curl -m 30 "$API_BASE_URL/auth/health/db"
+          curl "${{ secrets.API_BASE_URL }}/auth/health-db" 
