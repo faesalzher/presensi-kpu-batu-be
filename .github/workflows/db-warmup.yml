@@ -12,4 +12,4 @@ jobs:
     steps:
       - name:  Ping health DB
         run: |
-          curl -X POST "${{ secrets.API_BASE_URL }}/auth/health-db" 
+          curl -X POST "${{ secrets.API_BASE_URL }}/auth/health/db" 
