@@ -37,8 +37,8 @@ public class LeaveRequest : BaseEntity
     public DateTime? ReviewedAt { get; set; }
 
     [Column("attachment_id")]
-    public Guid? AttachmentId { get; set; }
+    public string? AttachmentId { get; set; }
 
-    [Column("created_at")]
-    public DateTime CreatedAt { get; set; }
+    [Column("attachment_url")]
+    public string? AttachmentUrl { get; set; }
 }

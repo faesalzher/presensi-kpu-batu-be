@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
+using presensi_kpu_batu_be.Modules.GoogleDriveModule;
 using presensi_kpu_batu_be.Modules.StatisticModule;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
@@ -158,6 +159,8 @@ builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 builder.Services.AddScoped<IGeneralSettingService, GeneralSettingService>();
 builder.Services.AddScoped<ITimeProviderService, TimeProviderService>();
 builder.Services.AddScoped<IStatisticService, StatisticService>();
+builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
+
 
 var app = builder.Build();
 

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using presensi_kpu_batu_be.Domain.Entities;
 
 public class DepartmentService : IDepartmentService
 {
@@ -17,5 +18,17 @@ public class DepartmentService : IDepartmentService
             .Where(u => u.Guid == userId)
             .Select(u => u.DepartmentId)
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<Department?> GetByNameAsync(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        // PostgreSQL-friendly & case-insensitive
+        return await _context.Department
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d =>
+                EF.Functions.ILike(d.Name, name));
     }
 }
