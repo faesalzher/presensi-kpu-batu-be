@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  cutoff-checkout:
+  db-warmup:
     runs-on: ubuntu-latest
 
     steps:
