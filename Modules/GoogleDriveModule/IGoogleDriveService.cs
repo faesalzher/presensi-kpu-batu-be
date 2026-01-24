@@ -2,8 +2,8 @@
 {
     public interface IGoogleDriveService
     {
-        Task<(string FileId, string WebViewLink)> UploadAsync(IFormFile file);
-        Task DeleteAsync(string fileId);
+        //Task<(string FileId, string WebViewLink)> UploadAsync(IFormFile file);
+        //Task DeleteAsync(string fileId);
     }
 
 }

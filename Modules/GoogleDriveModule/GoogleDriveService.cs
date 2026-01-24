@@ -12,79 +12,79 @@ public class GoogleDriveService : IGoogleDriveService
 
     public GoogleDriveService(IConfiguration configuration)
     {
-        string json;
+        //string json;
 
-        // 1️⃣ Coba ambil dari appsettings.Development.json (LOCAL)
-        var section = configuration.GetSection("GOOGLE_DRIVE_CREDENTIAL_JSON");
+        //// 1️⃣ Coba ambil dari appsettings.Development.json (LOCAL)
+        //var section = configuration.GetSection("GOOGLE_DRIVE_CREDENTIAL_JSON");
 
-        if (section.Exists())
-        {
-            // convert section → Dictionary → JSON string
-            var dict = section.GetChildren()
-                .ToDictionary(
-                    x => x.Key,
-                    x => (object?)x.Value ?? x.GetChildren()
-                        .ToDictionary(c => c.Key, c => (object?)c.Value)
-                );
+        //if (section.Exists())
+        //{
+        //    // convert section → Dictionary → JSON string
+        //    var dict = section.GetChildren()
+        //        .ToDictionary(
+        //            x => x.Key,
+        //            x => (object?)x.Value ?? x.GetChildren()
+        //                .ToDictionary(c => c.Key, c => (object?)c.Value)
+        //        );
 
-            json = JsonSerializer.Serialize(dict);
-        }
-        else
-        {
-            // 2️⃣ Fallback ke ENV (Render)
-            json = configuration["GOOGLE_DRIVE_CREDENTIAL_JSON"];
-        }
+        //    json = JsonSerializer.Serialize(dict);
+        //}
+        //else
+        //{
+        //    // 2️⃣ Fallback ke ENV (Render)
+        //    json = configuration["GOOGLE_DRIVE_CREDENTIAL_JSON"];
+        //}
 
-        if (string.IsNullOrEmpty(json))
-            throw new Exception("Google Drive credential not found");
+        //if (string.IsNullOrEmpty(json))
+        //    throw new Exception("Google Drive credential not found");
 
-        _leaveFolderId = configuration["GoogleDrive:LeaveFolderId"]
-            ?? throw new Exception("LeaveFolderId not set");
+        //_leaveFolderId = configuration["GoogleDrive:LeaveFolderId"]
+        //    ?? throw new Exception("LeaveFolderId not set");
 
-        var credential = GoogleCredential
-            .FromJson(json)
-            .CreateScoped(DriveService.ScopeConstants.Drive);
+        //var credential = GoogleCredential
+        //    .FromJson(json)
+        //    .CreateScoped(DriveService.ScopeConstants.Drive);
 
-        _driveService = new DriveService(new BaseClientService.Initializer
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = "Presensi KPU Batu"
-        });
+        //_driveService = new DriveService(new BaseClientService.Initializer
+        //{
+        //    HttpClientInitializer = credential,
+        //    ApplicationName = "Presensi KPU Batu"
+        //});
     }
 
-    public async Task<(string FileId, string WebViewLink)> UploadAsync(
-        IFormFile file)
-    {
-        var metadata = new Google.Apis.Drive.v3.Data.File
-        {
-            Name = $"{Guid.NewGuid()}_{file.FileName}",
-            Parents = new[] { _leaveFolderId }
-        };
+    //public async Task<(string FileId, string WebViewLink)> UploadAsync(
+    //    IFormFile file)
+    //{
+    //    var metadata = new Google.Apis.Drive.v3.Data.File
+    //    {
+    //        Name = $"{Guid.NewGuid()}_{file.FileName}",
+    //        Parents = new[] { _leaveFolderId }
+    //    };
 
-        await using var stream = file.OpenReadStream();
+    //    await using var stream = file.OpenReadStream();
 
-        var request = _driveService.Files.Create(
-            metadata,
-            stream,
-            file.ContentType
-        );
-        // 🔥 INI KUNCI UTAMANYA
-        request.SupportsAllDrives = true;
+    //    var request = _driveService.Files.Create(
+    //        metadata,
+    //        stream,
+    //        file.ContentType
+    //    );
+    //    // 🔥 INI KUNCI UTAMANYA
+    //    request.SupportsAllDrives = true;
 
-        request.Fields = "id, webViewLink";
+    //    request.Fields = "id, webViewLink";
 
-        var result = await request.UploadAsync();
-        if (result.Status != UploadStatus.Completed)
-            throw new Exception("Upload to Google Drive failed");
+    //    var result = await request.UploadAsync();
+    //    if (result.Status != UploadStatus.Completed)
+    //        throw new Exception("Upload to Google Drive failed");
 
-        return (
-            request.ResponseBody.Id,
-            request.ResponseBody.WebViewLink
-        );
-    }
+    //    return (
+    //        request.ResponseBody.Id,
+    //        request.ResponseBody.WebViewLink
+    //    );
+    //}
 
-    public async Task DeleteAsync(string fileId)
-    {
-        await _driveService.Files.Delete(fileId).ExecuteAsync();
-    }
+    //public async Task DeleteAsync(string fileId)
+    //{
+    //    await _driveService.Files.Delete(fileId).ExecuteAsync();
+    //}
 }

@@ -98,11 +98,11 @@ public class LeaveRequestService : ILeaveRequestService
 
             var folderId = _config["GoogleDrive:LeaveFolderId"];
 
-            var (fileId, webViewLink) =
-                await _googleDrive.UploadAsync(dto.Attachment);
+            //var (fileId, webViewLink) =
+            //    await _googleDrive.UploadAsync(dto.Attachment);
 
-            attachmentId = fileId;
-            attachmentUrl = webViewLink;
+            //attachmentId = fileId;
+            //attachmentUrl = webViewLink;
         }
 
         // =====================
