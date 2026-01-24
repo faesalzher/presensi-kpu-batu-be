@@ -28,7 +28,7 @@ builder.Configuration
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
                        ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 // Controller + Swagger
