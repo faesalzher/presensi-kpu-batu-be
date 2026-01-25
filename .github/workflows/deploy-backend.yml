@@ -1,0 +1,37 @@
+﻿name: Deploy Backend
+
+on:
+  workflow_dispatch:   # 🔥 CUMA MANUAL
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin
+
+      - name: Build & Push Backend Image
+        run: |
+          docker build -t ghcr.io/${{ github.actor }}/presensi-kpu-batu-be:latest .
+          docker push ghcr.io/${{ github.actor }}/presensi-kpu-batu-be:latest
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/presensi
+            docker-compose pull backend
+            docker-compose up -d backend
