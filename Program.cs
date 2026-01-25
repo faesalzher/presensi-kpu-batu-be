@@ -71,7 +71,8 @@ builder.Services.AddCors(options =>
             "http://localhost:5173",
             "https://absensi-test-one-fe.vercel.app",
             "https://presensi-kpu-batu.vercel.app",
-            "http://160.19.166.186"
+            "http://160.19.166.186",
+            "https://presensi-kpu-kota-batu.online"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
