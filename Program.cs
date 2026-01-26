@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using presensi_kpu_batu_be.Modules.AttendanceModule;
 using presensi_kpu_batu_be.Modules.GoogleDriveModule;
@@ -188,6 +189,13 @@ app.UseExceptionHandler(errorApp =>
             message = exception?.Message
         });
     });
+});
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "uploads")),
+    RequestPath = "/uploads"
 });
 
 // Swagger dev only

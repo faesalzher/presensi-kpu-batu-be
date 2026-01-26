@@ -30,6 +30,10 @@ public class LeaveRequest : BaseEntity
     public DateOnly StartDate { get; set; }
 
     [Required]
+    [Column("reason")]
+    public string? Reason { get; set; }
+
+    [Required]
     [Column("end_date")]
     public DateOnly EndDate { get; set; }
 

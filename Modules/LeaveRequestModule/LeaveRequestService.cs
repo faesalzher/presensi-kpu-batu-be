@@ -75,7 +75,7 @@ public class LeaveRequestService : ILeaveRequestService
                 "Attachment is required");
 
         // =====================
-        // Upload ke Google Drive
+        // Upload ke Server (VPS)
         // =====================
         string? attachmentId = null;
         string? attachmentUrl = null;
@@ -96,14 +96,13 @@ public class LeaveRequestService : ILeaveRequestService
             if (!allowedTypes.Contains(dto.Attachment.ContentType))
                 throw new BadRequestException("Invalid file type");
 
-            var folderId = _config["GoogleDrive:LeaveFolderId"];
+            var (fileName, fileUrl) =
+                await SaveLeaveAttachmentAsync(dto.Attachment);
 
-            //var (fileId, webViewLink) =
-            //    await _googleDrive.UploadAsync(dto.Attachment);
-
-            //attachmentId = fileId;
-            //attachmentUrl = webViewLink;
+            attachmentId = fileName;
+            attachmentUrl = fileUrl;
         }
+
 
         // =====================
         // Simpan ke DB
@@ -119,7 +118,9 @@ public class LeaveRequestService : ILeaveRequestService
             EndDate = DateOnly.FromDateTime(dto.EndDate),
             AttachmentId = attachmentId,
             AttachmentUrl = attachmentUrl,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Reason = dto.Reason
+
         };
 
         _context.LeaveRequest.Add(leave);
@@ -127,5 +128,33 @@ public class LeaveRequestService : ILeaveRequestService
 
         return leave;
     }
+
+    private async Task<(string fileName, string fileUrl)> SaveLeaveAttachmentAsync(
+    IFormFile file)
+    {
+        var rootPath = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "uploads",
+            "leave",
+            DateTime.UtcNow.Year.ToString(),
+            DateTime.UtcNow.Month.ToString("D2")
+        );
+
+        if (!Directory.Exists(rootPath))
+            Directory.CreateDirectory(rootPath);
+
+        var extension = Path.GetExtension(file.FileName);
+        var safeFileName = $"leave_{Guid.NewGuid()}{extension}";
+        var fullPath = Path.Combine(rootPath, safeFileName);
+
+        await using var stream = new FileStream(fullPath, FileMode.Create);
+        await file.CopyToAsync(stream);
+
+        // URL publik (sesuaikan domain kamu)
+        var fileUrl = $"{_config["App:BaseUrl"]}/uploads/leave/{DateTime.UtcNow.Year}/{DateTime.UtcNow.Month:D2}/{safeFileName}";
+
+        return (safeFileName, fileUrl);
+    }
+
 
 }
