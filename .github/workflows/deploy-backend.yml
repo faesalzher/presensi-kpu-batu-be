@@ -30,5 +30,6 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /opt/presensi
-            docker-compose pull backend
-            docker-compose up -d backend
+            docker compose pull backend
+            docker compose up -d backend
+
