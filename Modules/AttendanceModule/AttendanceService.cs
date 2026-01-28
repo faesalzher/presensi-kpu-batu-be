@@ -6,6 +6,7 @@ using presensi_kpu_batu_be.Domain.Enums;
 using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
+using presensi_kpu_batu_be.Modules.TunjanganModule;
 
 namespace presensi_kpu_batu_be.Modules.AttendanceModule
 {
@@ -16,16 +17,18 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         private readonly IGeneralSettingService _settingService;
         private readonly ITimeProviderService _timeProviderService;
         private readonly IUserService _userService;
+        private readonly ITunjanganService _tunjanganService;
 
 
         public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IGeneralSettingService settingService
-            , ITimeProviderService timeProvidersService, IUserService userService)
+            , ITimeProviderService timeProvidersService, IUserService userService, ITunjanganService tunjanganService)
         {
             _context = context;
             _leaveRequestsService = leaveRequestsService;
             _settingService = settingService;
             _timeProviderService = timeProvidersService;
             _userService = userService;
+            _tunjanganService = tunjanganService;
         }
 
         public async Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid)
@@ -174,13 +177,20 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 if (!alreadyExists)
                 {
+                    const decimal penaltyPercent = 2.5m;
+
+                    var tukinBase = await GetTukinBaseAmountForUserAsync(userId);
+                    var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+
                     _context.AttendanceViolation.Add(new AttendanceViolation
                     {
                         Guid = Guid.NewGuid(),
                         AttendanceId = attendance.Guid,
                         Type = AttendanceViolationType.LATE,
                         Source = ViolationSource.CHECK_IN,
-                        PenaltyPercent = 2.5m,
+                        PenaltyPercent = penaltyPercent,
+                        TukinBaseAmount = tukinBase,
+                        PenaltyAmount = penaltyAmount,
                         OccurredAt = nowUtc,
                         Notes = lateMinutes <= lateToleranceMinutes
                             ? "Terlambat (dalam batas toleransi, tidak dikompensasi)"
@@ -341,13 +351,20 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 if (nowLocal < workEndLocal)
                 {
                     attendance.Status = WorkingStatus.PROBLEM;
+
+                    const decimal penaltyPercent = 2.5m;
+                    var tukinBase = await GetTukinBaseAmountForUserAsync(userId);
+                    var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+
                     _context.AttendanceViolation.Add(new AttendanceViolation
                     {
                         Guid = Guid.NewGuid(),
                         AttendanceId = attendance.Guid,
                         Type = AttendanceViolationType.EARLY_DEPARTURE,
                         Source = ViolationSource.CHECK_OUT,
-                        PenaltyPercent = 2.5m,
+                        PenaltyPercent = penaltyPercent,
+                        TukinBaseAmount = tukinBase,
+                        PenaltyAmount = penaltyAmount,
                         OccurredAt = nowUtc,
                         Notes = "Pulang sebelum jam kerja selesai"
                     });
@@ -458,13 +475,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 newAttendances.Add(attendance);
 
+                const decimal penaltyPercent = 2.5m;
+                var tukinBase = await GetTukinBaseAmountForUserAsync(user.Guid);
+                var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+
                 newViolations.Add(new AttendanceViolation
                 {
                     Guid = Guid.NewGuid(),
                     AttendanceId = attendance.Guid,
                     Type = AttendanceViolationType.NOT_CHECKED_IN,
                     Source = ViolationSource.CHECK_IN,
-                    PenaltyPercent = 2.5m,
+                    PenaltyPercent = penaltyPercent,
+                    TukinBaseAmount = tukinBase,
+                    PenaltyAmount = penaltyAmount,
                     OccurredAt = nowUtc,
                     Notes = "Tidak presensi masuk"
                 });
@@ -498,7 +521,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 Date = today,
                 ExecutedAtUtc = nowUtc
             };
-
 
             //penjagaan 18 malam
             if (nowLocal.TimeOfDay < new TimeSpan(18, 0, 0))
@@ -585,13 +607,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     var hasAbsent = existing?.Any(v => v.Type == AttendanceViolationType.ABSENT) == true;
                     if (!hasAbsent)
                     {
+                        const decimal penaltyPercent = 5.0m;
+                        var tukinBase = await GetTukinBaseAmountForUserAsync(attendance.UserId);
+                        var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+
                         violationsToAdd.Add(new AttendanceViolation
                         {
                             Guid = Guid.NewGuid(),
                             AttendanceId = attendance.Guid,
                             Type = AttendanceViolationType.ABSENT,
                             Source = ViolationSource.SYSTEM,
-                            PenaltyPercent = 5.0m,
+                            PenaltyPercent = penaltyPercent,
+                            TukinBaseAmount = tukinBase,
+                            PenaltyAmount = penaltyAmount,
                             OccurredAt = nowUtc,
                             Notes = "Tidak presensi masuk dan pulang"
                         });
@@ -616,13 +644,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     if (!hasViolation)
                     {
+                        const decimal penaltyPercent = 2.5m;
+                        var tukinBase = await GetTukinBaseAmountForUserAsync(attendance.UserId);
+                        var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+
                         violationsToAdd.Add(new AttendanceViolation
                         {
                             Guid = Guid.NewGuid(),
                             AttendanceId = attendance.Guid,
                             Type = AttendanceViolationType.NOT_CHECKED_OUT,
                             Source = ViolationSource.CHECK_OUT,
-                            PenaltyPercent = 2.5m,
+                            PenaltyPercent = penaltyPercent,
+                            TukinBaseAmount = tukinBase,
+                            PenaltyAmount = penaltyAmount,
                             OccurredAt = nowUtc,
                             Notes = "Tidak presensi pulang"
                         });
@@ -750,6 +784,9 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 .FirstOrDefaultAsync();
         }
 
+        // helper: ambil tukin base dari ref_tunjangan_kinerja
+        private Task<decimal> GetTukinBaseAmountForUserAsync(Guid userId)
+            => _tunjanganService.GetTukinBaseAmountForUserAsync(userId);
 
     }
 }

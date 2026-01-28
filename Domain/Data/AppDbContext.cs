@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<GeneralSetting> GeneralSetting { get; set; }
     public DbSet<AttendanceViolation> AttendanceViolation { get; set; }
     public DbSet<FileMetadata> FileMetadata { get; set; }
+    public DbSet<RefTunjanganKinerja> RefTunjanganKinerja { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

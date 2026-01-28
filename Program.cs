@@ -9,6 +9,7 @@ using presensi_kpu_batu_be.Modules.GoogleDriveModule;
 using presensi_kpu_batu_be.Modules.StatisticModule;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
+using presensi_kpu_batu_be.Modules.TunjanganModule;
 using System.Text;
 
 // === FIX WAJIB UNTUK SUPABASE POOLER ===
@@ -150,7 +151,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 //daftarkan interface dan service
@@ -163,6 +163,7 @@ builder.Services.AddScoped<IGeneralSettingService, GeneralSettingService>();
 builder.Services.AddScoped<ITimeProviderService, TimeProviderService>();
 builder.Services.AddScoped<IStatisticService, StatisticService>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
+builder.Services.AddScoped<ITunjanganService, TunjanganService>();
 
 
 var app = builder.Build();

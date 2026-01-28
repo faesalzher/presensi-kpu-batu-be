@@ -30,6 +30,26 @@
         [Column("penalty_percent", TypeName = "numeric(5,2)")]
         public decimal PenaltyPercent { get; set; }
 
+        // =====================
+        // 🔥 TAMBAHAN BARU
+        // =====================
+
+        /// <summary>
+        /// Besaran tukin yang berlaku saat pelanggaran terjadi
+        /// (snapshot aturan, tidak berubah walaupun aturan / golongan berubah)
+        /// </summary>
+        [Required]
+        [Column("tukin_base_amount", TypeName = "numeric(18,2)")]
+        public decimal TukinBaseAmount { get; set; }
+
+        /// <summary>
+        /// Nominal potongan tukin hasil perhitungan
+        /// (TukinBaseAmount * PenaltyPercent / 100)
+        /// </summary>
+        [Required]
+        [Column("penalty_amount", TypeName = "numeric(18,2)")]
+        public decimal PenaltyAmount { get; set; }
+
         [Required]
         [Column("occurred_at")]
         public DateTime OccurredAt { get; set; } // UTC
@@ -38,5 +58,4 @@
         [MaxLength(255)]
         public string? Notes { get; set; }
     }
-
 }

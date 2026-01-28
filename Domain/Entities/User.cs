@@ -40,6 +40,9 @@ public class User : BaseEntity
     [Column("position")]
     public string? Position { get; set; }
 
+    [Column("kelas_jabatan")]
+    public int? KelasJabatan { get; set; }
+
     [Column("is_active")]
     public bool IsActive { get; set; }
 
