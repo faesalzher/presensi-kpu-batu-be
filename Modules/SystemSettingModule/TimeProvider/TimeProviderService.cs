@@ -171,7 +171,20 @@ public class TimeProviderService : ITimeProviderService
         };
     }
 
+    public async Task<bool> IsWorkingDayAsync(DateOnly date)
+    {
+        int day = NormalizeDayOfWeek(date);
 
+        // Weekend
+        if (day == 6 || day == 7)
+            return false;
+
+        // Libur nasional
+        if (await IsHolidayAsync(date))
+            return false;
+
+        return true;
+    }
 
 
     // =========================

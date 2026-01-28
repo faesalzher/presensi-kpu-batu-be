@@ -4,4 +4,5 @@ public interface ITimeProviderService
 {
     Task<DateTime> NowAsync();
     Task<WorkingDayResponseDto> GetTodayWorkingInfoAsync();
+    Task<bool> IsWorkingDayAsync(DateOnly date);
 }

@@ -44,5 +44,32 @@ namespace presensi_kpu_batu_be.Modules.LeaveRequestModule
 
             return Ok(result);
         }
+
+        [HttpGet("my-requests")]
+        public async Task<IActionResult> GetMyLeaveRequests()
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var userId = Guid.Parse(userIdClaim);
+
+            var result = await _leaveRequestService.GetMyLeaveRequests(userId);
+            return Ok(result);
+        }
+
+        // GET /leave-request/{guid}
+        [HttpGet("{guid}")]
+        public async Task<IActionResult> GetByGuid(Guid guid)
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var userId = Guid.Parse(userIdClaim);
+
+            var result = await _leaveRequestService.GetByGuidAsync(guid, userId);
+            return result == null ? NotFound() : Ok(result);
+        }
     }
 }

@@ -30,19 +30,16 @@ public class LeaveRequest : BaseEntity
     public DateOnly StartDate { get; set; }
 
     [Required]
-    [Column("reason")]
-    public string? Reason { get; set; }
-
-    [Required]
     [Column("end_date")]
     public DateOnly EndDate { get; set; }
+
+    [Required]
+    [Column("reason")]
+    public string? Reason { get; set; }
 
     [Column("reviewed_at")]
     public DateTime? ReviewedAt { get; set; }
 
-    [Column("attachment_id")]
-    public string? AttachmentId { get; set; }
-
-    [Column("attachment_url")]
-    public string? AttachmentUrl { get; set; }
+    // ❗ tidak simpan attachment_id di sini
+    // relasi via file_metadata.related_id
 }

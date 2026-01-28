@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<LeaveRequest> LeaveRequest { get; set; }
     public DbSet<GeneralSetting> GeneralSetting { get; set; }
     public DbSet<AttendanceViolation> AttendanceViolation { get; set; }
+    public DbSet<FileMetadata> FileMetadata { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +52,12 @@ public class AppDbContext : DbContext
             builder.Property(x => x.Type)
                    .HasConversion<string>();
             builder.Property(x => x.Status)
+                   .HasConversion<string>();
+        });
+
+        modelBuilder.Entity<FileMetadata>(builder =>
+        {
+            builder.Property(x => x.Category)
                    .HasConversion<string>();
         });
     }

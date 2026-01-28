@@ -13,18 +13,16 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
     {
         private readonly AppDbContext _context;
         private readonly ILeaveRequestService _leaveRequestsService;
-        private readonly IDepartmentService _departmentService;
         private readonly IGeneralSettingService _settingService;
         private readonly ITimeProviderService _timeProviderService;
         private readonly IUserService _userService;
 
 
-        public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IDepartmentService departmentService, IGeneralSettingService settingService
+        public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IGeneralSettingService settingService
             , ITimeProviderService timeProvidersService, IUserService userService)
         {
             _context = context;
             _leaveRequestsService = leaveRequestsService;
-            _departmentService = departmentService;
             _settingService = settingService;
             _timeProviderService = timeProvidersService;
             _userService = userService;
