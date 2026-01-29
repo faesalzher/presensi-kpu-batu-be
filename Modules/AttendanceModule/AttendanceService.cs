@@ -453,6 +453,12 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var attendanceByUserId = existingAttendances
                 .ToDictionary(a => a.UserId, a => a);
 
+            // 🔥 compute OccurredAtUtc aligned to targetDate (use nowLocal time-of-day on targetDate)
+            var executedLocalTime = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+            var occurredLocal = new DateTime(today.Year, today.Month, today.Day,
+                                             executedLocalTime.Hour, executedLocalTime.Minute, executedLocalTime.Second);
+            var occurredAtUtc = TimeZoneInfo.ConvertTimeToUtc(occurredLocal, tz);
+
             var newAttendances = new List<Attendance>();
             var newViolations = new List<AttendanceViolation>();
 
@@ -486,7 +492,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     PenaltyPercent = penaltyPercent,
                     TukinBaseAmount = tukinBase,
                     PenaltyAmount = penaltyAmount,
-                    OccurredAt = nowUtc,
+                    OccurredAt = occurredAtUtc,
                     Notes = "Tidak presensi masuk"
                 });
 
@@ -565,6 +571,12 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 .GroupBy(v => v.AttendanceId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
+            // 🔥 compute OccurredAtUtc aligned to targetDate (use nowLocal time-of-day on targetDate)
+            var executedLocalTime2 = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+            var occurredLocal2 = new DateTime(today.Year, today.Month, today.Day,
+                                              executedLocalTime2.Hour, executedLocalTime2.Minute, executedLocalTime2.Second);
+            var occurredAtUtc2 = TimeZoneInfo.ConvertTimeToUtc(occurredLocal2, tz);
+
             var violationsToAdd = new List<AttendanceViolation>();
 
             foreach (var userId in userIds)
@@ -629,7 +641,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             PenaltyPercent = penaltyPercent,
                             TukinBaseAmount = tukinBase,
                             PenaltyAmount = penaltyAmount,
-                            OccurredAt = nowUtc,
+                            OccurredAt = occurredAtUtc2,
                             Notes = "Tidak presensi masuk dan pulang"
                         });
 
@@ -666,7 +678,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             PenaltyPercent = penaltyPercent,
                             TukinBaseAmount = tukinBase,
                             PenaltyAmount = penaltyAmount,
-                            OccurredAt = nowUtc,
+                            OccurredAt = occurredAtUtc2,
                             Notes = "Tidak presensi pulang"
                         });
 
