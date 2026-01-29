@@ -45,11 +45,5 @@ public class User : BaseEntity
 
     [Column("is_active")]
     public bool IsActive { get; set; }
-
-    [Column("created_at")]
-    public DateTime CreatedAt { get; set; }
-
-    [Column("updated_at")]
-    public DateTime UpdatedAt { get; set; }
 }
 
