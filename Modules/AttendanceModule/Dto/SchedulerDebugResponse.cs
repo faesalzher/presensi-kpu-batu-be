@@ -13,6 +13,9 @@
         public int ViolationsRemoved { get; set; }
 
         public List<Guid> AffectedUserIds { get; set; } = new();
+        
+        // 🔥 TAMBAH FIELD INI
+        public string? DebugMessage { get; set; }
     }
 
 }

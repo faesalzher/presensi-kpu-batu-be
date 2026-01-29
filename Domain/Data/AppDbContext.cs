@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<AttendanceViolation> AttendanceViolation { get; set; }
     public DbSet<FileMetadata> FileMetadata { get; set; }
     public DbSet<RefTunjanganKinerja> RefTunjanganKinerja { get; set; }
+    public DbSet<SchedulerLog> SchedulerLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

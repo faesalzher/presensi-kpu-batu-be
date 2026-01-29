@@ -19,7 +19,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         private readonly IUserService _userService;
         private readonly ITunjanganService _tunjanganService;
 
-
         public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IGeneralSettingService settingService
             , ITimeProviderService timeProvidersService, IUserService userService, ITunjanganService tunjanganService)
         {
@@ -34,7 +33,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         public async Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid)
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
 
             return await _context.Attendance
                 .AsNoTracking()
@@ -66,7 +64,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     Status = a.Status.ToString(),
                 })
                 .FirstOrDefaultAsync();
-
         }
 
         public async Task<AttendanceResponse> CheckIn(Guid userId, CheckInDto dto)
@@ -145,7 +142,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     Guid = Guid.NewGuid(),
                     UserId = userId,
                     Date = today,
-                    Status = lateMinutes > 0 ? WorkingStatus.PROBLEM: WorkingStatus.PRESENT,
+                    Status = lateMinutes > 0 ? WorkingStatus.PROBLEM : WorkingStatus.PRESENT,
                     CheckInTime = nowUtc,
                     CheckInNotes = dto.Notes,
                     LateMinutes = lateMinutes,
@@ -213,7 +210,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             };
         }
 
-
         public async Task<AttendanceResponse> CheckOut(Guid userId, CheckOutDto dto)
         {
             // ======================================================
@@ -256,7 +252,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             if (leaveStatus.IsOnLeave)
                 throw new BadRequestException("Anda sedang cuti hari ini");
-
 
             // ======================================================
             // 2. AMBIL ATTENDANCE
@@ -388,7 +383,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             };
         }
 
-
         private TimeZoneInfo GetTimeZone()
         {
             try
@@ -404,23 +398,23 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             }
         }
-
-
-        public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync()
+                
+        public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync(DateOnly? targetDate = null)
         {
+            // ======================================================
+            // TENTUKAN TANGGAL TARGET
+            // ======================================================
+            var nowUtc = await _timeProviderService.NowAsync();
+            var tz = GetTimeZone();
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+
+            // Gunakan targetDate jika diberikan, otherwise gunakan hari ini
+            var today = targetDate ?? DateOnly.FromDateTime(nowLocal);
 
             // ======================================================
             // VALIDASI HARI KERJA
             // ======================================================
-            var workingDay = await _timeProviderService.GetTodayWorkingInfoAsync();
-
-            if (workingDay.IsHoliday)
-                throw new BadRequestException(workingDay.Message);
-
-            var nowUtc = await _timeProviderService.NowAsync();
-            var tz = GetTimeZone();
-            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
-            var today = DateOnly.FromDateTime(nowLocal);
+            var isWorkingDay = await _timeProviderService.IsWorkingDayAsync(today);
 
             var response = new SchedulerDebugResponse
             {
@@ -429,25 +423,29 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 ExecutedAtUtc = nowUtc
             };
 
-
-            //penjagaan 12 siang
-            if (nowLocal.TimeOfDay <= new TimeSpan(12, 0, 0))
+            if (!isWorkingDay)
+            {
+                response.AttendanceCreated = 0;
+                response.ViolationsAdded = 0;
+                response.AffectedUserIds = new();
+                // 🔥 TAMBAH PESAN HOLIDAY
+                response.DebugMessage = "Skipped: Holiday or non-working day";
                 return response;
+            }
+
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
             var usersToProcess = users.Select(u => u.Guid).ToList();
 
-            // 2️⃣ Ambil user yang CUTI hari ini
-            var usersOnLeave =
-                await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
+            // 2️⃣ Ambil user yang CUTI pada tanggal target
+            var usersOnLeave = await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
 
             // 3️⃣ Filter → hanya yang WAJIB presensi
             var userIds = usersToProcess
                 .Except(usersOnLeave)
                 .ToList();
 
-
-            // 2️⃣ Ambil attendance hari ini
+            // 4️⃣ Ambil attendance pada tanggal target
             var existingAttendances = await _context.Attendance
                 .Where(a => a.Date == today && userIds.Contains(a.UserId))
                 .ToListAsync();
@@ -507,13 +505,22 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             return response;
         }
 
-
-        public async Task<SchedulerDebugResponse> RunCutOffCheckOutAsync()
+        public async Task<SchedulerDebugResponse> RunCutOffCheckOutAsync(DateOnly? targetDate = null)
         {
+            // ======================================================
+            // TENTUKAN TANGGAL TARGET
+            // ======================================================
             var nowUtc = await _timeProviderService.NowAsync();
             var tz = GetTimeZone();
             var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
-            var today = DateOnly.FromDateTime(nowLocal);
+
+            // Gunakan targetDate jika diberikan, otherwise gunakan hari ini
+            var today = targetDate ?? DateOnly.FromDateTime(nowLocal);
+
+            // ======================================================
+            // VALIDASI HARI KERJA
+            // ======================================================
+            var isWorkingDay = await _timeProviderService.IsWorkingDayAsync(today);
 
             var response = new SchedulerDebugResponse
             {
@@ -522,24 +529,26 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 ExecutedAtUtc = nowUtc
             };
 
-            //penjagaan 18 malam
-            if (nowLocal.TimeOfDay < new TimeSpan(18, 0, 0))
+            if (!isWorkingDay)
+            {
+                // 🔥 TAMBAH PESAN HOLIDAY
+                response.DebugMessage = "Skipped: Holiday or non-working day";
                 return response;
+            }
 
             // 1️⃣ Ambil user aktif
             var users = await _userService.GetActiveUsersAsync();
             var usersToProcess = users.Select(u => u.Guid).ToList();
 
-            // 2️⃣ Ambil user yang CUTI hari ini
-            var usersOnLeave =
-                await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
+            // 2️⃣ Ambil user yang CUTI pada tanggal target
+            var usersOnLeave = await _leaveRequestsService.GetUserIdsOnLeaveAsync(today);
 
             // 3️⃣ Filter → hanya yang WAJIB presensi
             var userIds = usersToProcess
                 .Except(usersOnLeave)
                 .ToList();
 
-            // 2️⃣ Ambil attendance hari ini
+            // 4️⃣ Ambil attendance pada tanggal target
             var attendances = await _context.Attendance
                 .Where(a => a.Date == today && userIds.Contains(a.UserId))
                 .ToListAsync();
@@ -547,7 +556,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var attendanceByUserId = attendances
                 .ToDictionary(a => a.UserId, a => a);
 
-            // preload violation hari ini
+            // Preload violation pada tanggal target
             var violations = await _context.AttendanceViolation
                 .Where(v => attendances.Select(a => a.Guid).Contains(v.AttendanceId))
                 .ToListAsync();
@@ -673,9 +682,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             return response;
         }
 
-
         public async Task<List<AttendanceResponse>> GetAttendanceAsync(
-      AttendanceQueryParams query)
+            AttendanceQueryParams query)
         {
             var q = _context.Attendance
                 .AsNoTracking()
@@ -706,47 +714,40 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 q = q.Where(x => x.DepartmentId == query.DepartmentId.Value);
             }
 
-
-
-            //return await q
-            //    .OrderByDescending(x => x.Date)
-            //    .ToListAsync();
-
             return await q
-            .OrderByDescending(a => a.Date)
-            .Select(a => new AttendanceResponse
-            {
-                Guid = a.Guid,
-                UserId = a.UserId,
+                .OrderByDescending(a => a.Date)
+                .Select(a => new AttendanceResponse
+                {
+                    Guid = a.Guid,
+                    UserId = a.UserId,
 
-                DepartmentId = a.DepartmentId,
-                DepartmentName = a.Department != null ? a.Department.Name : null,
+                    DepartmentId = a.DepartmentId,
+                    DepartmentName = a.Department != null ? a.Department.Name : null,
 
-                Date = a.Date,
+                    Date = a.Date,
 
-                isForgotCheckIn = a.Status == WorkingStatus.PROBLEM && a.CheckInTime == null,
-                isForgotCheckOut = a.Status == WorkingStatus.PROBLEM && a.CheckOutTime == null,
+                    isForgotCheckIn = a.Status == WorkingStatus.PROBLEM && a.CheckInTime == null,
+                    isForgotCheckOut = a.Status == WorkingStatus.PROBLEM && a.CheckOutTime == null,
 
-                CheckInTime = a.CheckInTime,
-                CheckInLocation = a.CheckInLocation,
-                CheckInPhotoId = a.CheckInPhotoId,
-                CheckInNotes = a.CheckInNotes,
+                    CheckInTime = a.CheckInTime,
+                    CheckInLocation = a.CheckInLocation,
+                    CheckInPhotoId = a.CheckInPhotoId,
+                    CheckInNotes = a.CheckInNotes,
 
-                CheckOutTime = a.CheckOutTime,
-                CheckOutLocation = a.CheckOutLocation,
-                CheckOutPhotoId = a.CheckOutPhotoId,
-                CheckOutNotes = a.CheckOutNotes,
+                    CheckOutTime = a.CheckOutTime,
+                    CheckOutLocation = a.CheckOutLocation,
+                    CheckOutPhotoId = a.CheckOutPhotoId,
+                    CheckOutNotes = a.CheckOutNotes,
 
-                WorkHours = a.WorkHours,
-                Status = a.Status.ToString(),
-            })
-            .ToListAsync();
-
+                    WorkHours = a.WorkHours,
+                    Status = a.Status.ToString(),
+                })
+                .ToListAsync();
         }
 
         public async Task<AttendanceResponse?> GetAttendanceByGuidAsync(
-    Guid attendanceGuid,
-    Guid userId)
+            Guid attendanceGuid,
+            Guid userId)
         {
             return await _context.Attendance
                 .AsNoTracking()
@@ -775,7 +776,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     CheckOutNotes = a.CheckOutNotes,
 
                     WorkHours = a.WorkHours,
-                    Status = a.Status.ToString(), // 🔥 ENUM → STRING
+                    Status = a.Status.ToString(),
                     ViolationNotes = string.Join(
                         ", ",
                         a.Violation.Select(v => v.Notes)
@@ -787,6 +788,5 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         // helper: ambil tukin base dari ref_tunjangan_kinerja
         private Task<decimal> GetTukinBaseAmountForUserAsync(Guid userId)
             => _tunjanganService.GetTukinBaseAmountForUserAsync(userId);
-
     }
 }

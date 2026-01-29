@@ -11,6 +11,7 @@ using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
 using presensi_kpu_batu_be.Modules.TunjanganModule;
 using System.Text;
+using presensi_kpu_batu_be.Modules.SystemSettingModule;
 
 // === FIX WAJIB UNTUK SUPABASE POOLER ===
 // Matikan prepared statements di Npgsql (ini penyebab API lambat panggilan kedua)
@@ -164,6 +165,7 @@ builder.Services.AddScoped<ITimeProviderService, TimeProviderService>();
 builder.Services.AddScoped<IStatisticService, StatisticService>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<ITunjanganService, TunjanganService>();
+builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 
 
 var app = builder.Build();
