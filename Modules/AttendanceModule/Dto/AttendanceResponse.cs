@@ -35,5 +35,6 @@
         public string? Status { get; set; } = default!;
         public string? ViolationNotes { get; set; }
 
+        public int? LateMinutes { get; set; }
     }
 }

@@ -157,6 +157,33 @@ public class SystemController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// GET /system/general-setting/{key}
+    /// Get a general setting value by key
+    /// </summary>
+    [HttpGet("general-setting/{key}")]
+    public async Task<IActionResult> GetGeneralSetting(string key)
+    {
+        try
+        {
+            var value = await _settingService.GetAsync(key);
+            return Ok(value);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get general setting: {Key}", key);
+            return StatusCode(500, new
+            {
+                message = "Failed to get general setting",
+                error = ex.Message
+            });
+        }
+    }
+
     private bool IsSchedulerAuthorized(string? secret)
     {
         if (string.IsNullOrWhiteSpace(secret))

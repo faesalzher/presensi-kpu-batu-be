@@ -7,6 +7,7 @@ using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
 using presensi_kpu_batu_be.Modules.TunjanganModule;
+using System.Globalization;
 
 namespace presensi_kpu_batu_be.Modules.AttendanceModule
 {
@@ -32,7 +33,22 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
         public async Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var timezoneId = await _settingService.GetAsync(GeneralSettingCodes.TIMEZONE);
+
+            var nowUtc = await _timeProviderService.NowAsync();
+
+            TimeZoneInfo tz;
+            try
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+            var today = DateOnly.FromDateTime(nowLocal);
 
             return await _context.Attendance
                 .AsNoTracking()
@@ -62,6 +78,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     WorkHours = a.WorkHours,
                     Status = a.Status.ToString(),
+                    LateMinutes = a.LateMinutes
                 })
                 .FirstOrDefaultAsync();
         }
@@ -105,6 +122,14 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             if (leaveStatus.IsOnLeave)
                 throw new BadRequestException("Anda sedang cuti hari ini");
+
+            // ======================================================
+            // 3b. VALIDASI KOORDINAT & GEOFENCE
+            // ======================================================
+            if (dto == null)
+                throw new BadRequestException("Invalid request payload");
+
+            await ValidateLocationAsync(dto.Latitude, dto.Longitude);
 
             // ======================================================
             // 4. AMBIL ATTENDANCE
@@ -254,6 +279,14 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 throw new BadRequestException("Anda sedang cuti hari ini");
 
             // ======================================================
+            // VALIDASI KOORDINAT & GEOFENCE (CHECK-OUT)
+            // ======================================================
+            if (dto == null)
+                throw new BadRequestException("Invalid request payload");
+
+            await ValidateLocationAsync(dto.Latitude, dto.Longitude);
+
+            // ======================================================
             // 2. AMBIL ATTENDANCE
             // ======================================================
             var attendance = await _context.Attendance
@@ -398,7 +431,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             }
         }
-                
+
         public async Task<SchedulerDebugResponse> RunCutOffCheckInAsync(DateOnly? targetDate = null)
         {
             // ======================================================
@@ -800,5 +833,81 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         // helper: ambil tukin base dari ref_tunjangan_kinerja
         private Task<decimal> GetTukinBaseAmountForUserAsync(Guid userId)
             => _tunjanganService.GetTukinBaseAmountForUserAsync(userId);
+
+        // Centralized validation for coordinates + geofence
+        private async Task ValidateLocationAsync(double latitude, double longitude)
+        {
+            // toggle: if IS_LOCATION_GEOFENCE_ENABLED == "false" skip validation
+            var toggle = await _settingService.GetAsync(GeneralSettingCodes.IS_LOCATION_GEOFENCE_ENABLED);
+            if (!string.IsNullOrWhiteSpace(toggle) && bool.TryParse(toggle, out var enabled) && !enabled)
+                return;
+
+            // Validate ranges
+            if (double.IsNaN(latitude) || double.IsNaN(longitude))
+                throw new BadRequestException("Koordinat tidak valid");
+
+            if (latitude < -90 || latitude > 90)
+                throw new BadRequestException("Latitude tidak valid");
+
+            if (longitude < -180 || longitude > 180)
+                throw new BadRequestException("Longitude tidak valid");
+
+            // Read single combined setting LATITUDE_LONGITUDE (expected: "lat, lon" or "lat, lon, radius")
+            var combined = await _settingService.GetAsync(GeneralSettingCodes.LATITUDE_LONGITUDE);
+
+            if (string.IsNullOrWhiteSpace(combined))
+                throw new BadRequestException("Geofence belum dikonfigurasi");
+
+            var parts = combined
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .ToArray();
+
+            if (parts.Length < 2)
+                throw new BadRequestException("Konfigurasi geofence tidak valid");
+
+            var geofenceLatStr = parts[0];
+            var geofenceLonStr = parts[1];
+
+            // radius may be provided as third element in the same setting
+            string? geofenceRadiusStr = parts.Length >= 3 && !string.IsNullOrWhiteSpace(parts[2])
+                ? parts[2]
+                : null;
+
+            // fallback: try MAX_RADIUS if radius not provided in combined (kept for compatibility)
+            if (string.IsNullOrWhiteSpace(geofenceRadiusStr))
+            {
+                geofenceRadiusStr = await _settingService.GetAsync(GeneralSettingCodes.MAX_RADIUS);
+            }
+
+            if (string.IsNullOrWhiteSpace(geofenceRadiusStr))
+                throw new BadRequestException("Geofence radius belum dikonfigurasi");
+
+            if (!double.TryParse(geofenceLatStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var geofenceLat) ||
+                !double.TryParse(geofenceLonStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var geofenceLon) ||
+                !double.TryParse(geofenceRadiusStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var geofenceRadiusMeters))
+            {
+                throw new BadRequestException("Konfigurasi geofence tidak valid");
+            }
+
+            var distance = CalculateDistanceMeters(latitude, longitude, geofenceLat, geofenceLon);
+            if (distance > geofenceRadiusMeters)
+                throw new BadRequestException($"Lokasi Anda berada di luar area kantor (jarak {Math.Round(distance)} m > {geofenceRadiusMeters} m)");
+        }
+
+        // calculate distance in meters between two coordinates using Haversine formula
+        private static double CalculateDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double R = 6371000; // Earth's radius in meters
+            double dLat = ToRadians(lat2 - lat1);
+            double dLon = ToRadians(lon2 - lon1);
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                       Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
+                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            return R * c;
+        }
+
+        private static double ToRadians(double angle) => angle * Math.PI / 180.0;
     }
 }
