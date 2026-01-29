@@ -90,15 +90,24 @@ namespace presensi_kpu_batu_be.Modules.SystemSettingModule
             // CEK DUPLICATE: Apakah job ini sudah pernah dijalankan
             // untuk tanggal ini dengan status SUCCESS atau FAILED?
             // ======================================================
+            var startUtc = DateTime.SpecifyKind(
+                targetDate.ToDateTime(TimeOnly.MinValue),
+                DateTimeKind.Utc
+            );
+
+            var endUtc = startUtc.AddDays(1);
+
             var existingLog = await _context.SchedulerLogs
                 .AsNoTracking()
                 .Where(x =>
                     x.JobName == dto.JobName &&
                     (x.Status == "SUCCESS" || x.Status == "FAILED") &&
-                    x.ScheduledAt.HasValue &&
-                    x.ScheduledAt.Value.Date == targetDate.ToDateTime(TimeOnly.MinValue).Date)
+                    x.ScheduledAt >= startUtc &&
+                    x.ScheduledAt < endUtc
+                )
                 .OrderByDescending(x => x.ExecutedAt)
                 .FirstOrDefaultAsync();
+
 
             // 🎯 Jika sudah ada log SUCCESS/FAILED untuk tanggal itu, SKIP
             if (existingLog != null)
