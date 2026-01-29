@@ -174,6 +174,80 @@ public class LeaveRequestService : ILeaveRequestService
 
         _context.FileMetadata.Add(fileMetadata);
 
+        // =====================
+        // Attendance adjustments for the leave period
+        // - create attendance for future dates (or today)
+        // - update existing attendances for past dates: set status according to leave type,
+        //   clear times and set work hours to 0, remove violations
+        // Note: map LeaveRequestType -> WorkingStatus based on available enum values.
+        // =====================
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        static WorkingStatus MapLeaveTypeToWorkingStatus(LeaveRequestType t) => t switch
+        {
+            LeaveRequestType.SICK => WorkingStatus.SICK,          // no explicit SICK in WorkingStatus -> use ON_LEAVE
+            LeaveRequestType.LEAVE => WorkingStatus.ON_LEAVE,
+            LeaveRequestType.DL => WorkingStatus.OFFICIAL_TRAVEL,
+            _ => WorkingStatus.ON_LEAVE
+        };
+
+        var mappedStatus = MapLeaveTypeToWorkingStatus(dto.Type);
+
+        foreach (var date in workingDates)
+        {
+            // single attendance per date per user
+            var attendance = await _context.Attendance
+                .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == date);
+
+            if (attendance == null)
+            {
+                // create attendance for the leave date (future, today or past)
+                attendance = new Attendance
+                {
+                    Guid = Guid.NewGuid(),
+                    UserId = userId,
+                    DepartmentId = dto.DepartmentId,
+                    Date = date,
+                    Status = mappedStatus,
+                    CheckInTime = null,
+                    CheckOutTime = null,
+                    WorkHours = 0m,
+                    LateMinutes = null
+                };
+
+                _context.Attendance.Add(attendance);
+
+                // remove any violations referencing this attendance (unlikely since new guid),
+                // but keep defensive: try to remove violations for same user/date (if any)
+                var orphanViolations = await _context.AttendanceViolation
+                    .Where(v => v.AttendanceId == attendance.Guid)
+                    .ToListAsync();
+
+                if (orphanViolations.Any())
+                    _context.AttendanceViolation.RemoveRange(orphanViolations);
+            }
+            else
+            {
+                // existing attendance: remove violations and update to leave status + clear times/works
+                var existingViolations = await _context.AttendanceViolation
+                    .Where(v => v.AttendanceId == attendance.Guid)
+                    .ToListAsync();
+
+                if (existingViolations.Any())
+                    _context.AttendanceViolation.RemoveRange(existingViolations);
+
+                attendance.Status = mappedStatus;
+                attendance.CheckInTime = null;
+                attendance.CheckOutTime = null;
+                attendance.WorkHours = 0m;
+                attendance.LateMinutes = null;
+                attendance.CheckInNotes = null;
+                attendance.CheckOutNotes = null;
+                attendance.CheckInPhotoId = null;
+                attendance.CheckOutPhotoId = null;
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         return leave;

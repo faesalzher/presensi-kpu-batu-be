@@ -9,6 +9,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule.Dto
         public int Present { get; set; }
         public int Absent { get; set; }
         public int Problem { get; set; }          // late + early + incomplete
+        public int Sick { get; set; }
         public int RemoteWorking { get; set; }
         public int OnLeave { get; set; }
         public int OfficialTravel { get; set; }

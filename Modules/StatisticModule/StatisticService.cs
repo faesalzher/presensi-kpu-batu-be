@@ -159,8 +159,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                         summary.Problem++;
                         break;
 
-                    case nameof(WorkingStatus.REMOTE_WORKING):
-                        summary.RemoteWorking++;
+                    case nameof(WorkingStatus.SICK):
+                        summary.Sick++;
                         break;
 
                     case nameof(WorkingStatus.ON_LEAVE):
