@@ -202,7 +202,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     const decimal penaltyPercent = 2.5m;
 
                     var tukinBase = await GetTukinBaseAmountForUserAsync(userId);
-                    var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+                    var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                     _context.AttendanceViolation.Add(new AttendanceViolation
                     {
@@ -382,7 +382,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                     const decimal penaltyPercent = 2.5m;
                     var tukinBase = await GetTukinBaseAmountForUserAsync(userId);
-                    var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+                    var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                     _context.AttendanceViolation.Add(new AttendanceViolation
                     {
@@ -514,7 +514,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 const decimal penaltyPercent = 2.5m;
                 var tukinBase = await GetTukinBaseAmountForUserAsync(user.Guid);
-                var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+                var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                 newViolations.Add(new AttendanceViolation
                 {
@@ -663,7 +663,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     {
                         const decimal penaltyPercent = 5.0m;
                         var tukinBase = await GetTukinBaseAmountForUserAsync(attendance.UserId);
-                        var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+                        var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                         violationsToAdd.Add(new AttendanceViolation
                         {
@@ -700,7 +700,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     {
                         const decimal penaltyPercent = 2.5m;
                         var tukinBase = await GetTukinBaseAmountForUserAsync(attendance.UserId);
-                        var penaltyAmount = Math.Round(tukinBase * penaltyPercent / 100m, 2);
+                        var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                         violationsToAdd.Add(new AttendanceViolation
                         {
