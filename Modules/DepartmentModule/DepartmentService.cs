@@ -31,4 +31,13 @@ public class DepartmentService : IDepartmentService
             .FirstOrDefaultAsync(d =>
                 EF.Functions.ILike(d.Name, name));
     }
+
+    public async Task<List<Department>> GetByHeadAsync(Guid headId)
+    {
+        return await _context.Department
+            .AsNoTracking()
+            .Where(d => d.HeadId == headId && d.IsActive)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+    }
 }

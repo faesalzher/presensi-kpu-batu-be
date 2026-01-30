@@ -51,4 +51,13 @@ public class UserContoller : ControllerBase
 
         return Ok(user);
     }
+
+    // GET /users
+    // Returns all active users (mapped to UserResponse DTO) via IUserService
+    [HttpGet("/users")]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await iUserService.GetAllActiveUsersAsync();
+        return Ok(users);
+    }
 }

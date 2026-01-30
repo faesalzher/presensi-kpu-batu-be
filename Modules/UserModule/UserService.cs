@@ -48,6 +48,67 @@ namespace presensi_kpu_batu_be.Modules.UserModule
                 .ToListAsync();
         }
 
+        public async Task<List<UserResponse>> GetAllActiveUsersAsync()
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive)
+                .GroupJoin(
+                    _context.Department.AsNoTracking(),
+                    u => u.DepartmentId,
+                    d => d.Guid,
+                    (u, deps) => new { u, deps }
+                )
+                .SelectMany(
+                    x => x.deps.DefaultIfEmpty(),
+                    (x, d) => new UserResponse
+                    {
+                        Guid = x.u.Guid,
+                        FullName = x.u.FullName ?? string.Empty,
+                        Email = x.u.Email ?? string.Empty,
+                        Nip = x.u.Nip,
+                        PhoneNumber = x.u.PhoneNumber,
+                        ProfileImageUrl = x.u.ProfileImageUrl,
+                        Role = x.u.Role,
+                        DepartmentId = x.u.DepartmentId,
+                        Department = d != null ? d.Name : null,
+                        Position = x.u.Position,
+                        IsActive = x.u.IsActive
+                    }
+                )
+                .ToListAsync();
+        }
 
+        public async Task<List<UserResponse>> GetUsersByDepartmentAsync(Guid departmentId)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive && u.DepartmentId == departmentId)
+                .GroupJoin(
+                    _context.Department.AsNoTracking(),
+                    u => u.DepartmentId,
+                    d => d.Guid,
+                    (u, deps) => new { u, deps }
+                )
+                .SelectMany(
+                    x => x.deps.DefaultIfEmpty(),
+                    (x, d) => new UserResponse
+                    {
+                        Guid = x.u.Guid,
+                        FullName = x.u.FullName ?? string.Empty,
+                        Email = x.u.Email ?? string.Empty,
+                        Nip = x.u.Nip,
+                        PhoneNumber = x.u.PhoneNumber,
+                        ProfileImageUrl = x.u.ProfileImageUrl,
+                        Role = x.u.Role,
+                        DepartmentId = x.u.DepartmentId,
+                        Department = d != null ? d.Name : null,
+                        Position = x.u.Position,
+                        IsActive = x.u.IsActive
+                    }
+                )
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+        }
     }
 }
