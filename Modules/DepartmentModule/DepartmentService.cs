@@ -40,4 +40,25 @@ public class DepartmentService : IDepartmentService
             .OrderBy(d => d.Name)
             .ToListAsync();
     }
+
+    public async Task<List<Department>> GetByMemberAsync(Guid memberId)
+    {
+        // Current data model: user has a single DepartmentId.
+        // Return that department (if any) in a list.
+        var deptId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Guid == memberId && u.IsActive)
+            .Select(u => u.DepartmentId)
+            .FirstOrDefaultAsync();
+
+        if (!deptId.HasValue)
+            return new List<Department>();
+
+        var dept = await _context.Department
+            .AsNoTracking()
+            .Where(d => d.Guid == deptId.Value && d.IsActive)
+            .ToListAsync();
+
+        return dept;
+    }
 }

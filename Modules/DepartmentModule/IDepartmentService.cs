@@ -8,4 +8,7 @@ public interface IDepartmentService
 
     // Get departments where the specified user is head
     Task<List<Department>> GetByHeadAsync(Guid headId);
+
+    // Get departments where the specified user is a member
+    Task<List<Department>> GetByMemberAsync(Guid memberId);
 }

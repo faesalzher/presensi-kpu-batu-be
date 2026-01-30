@@ -43,6 +43,17 @@ namespace presensi_kpu_batu_be.Modules.DepartmentModule
             return Ok(departments);
         }
 
+        // GET /department/by-member/{memberId}
+        [HttpGet("by-member/{memberId}")]
+        public async Task<IActionResult> GetByMember(string memberId)
+        {
+            if (!Guid.TryParse(memberId, out var guid))
+                return BadRequest("Invalid memberId format");
+
+            var departments = await _departmentService.GetByMemberAsync(guid);
+            return Ok(departments);
+        }
+
         // GET /users/by-department/{department}
         // Returns active users for the given department (admin & kasubag only)
         [Authorize(Roles = "ADMIN,KASUBAG")]
