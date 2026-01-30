@@ -831,8 +831,19 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         }
 
         // helper: ambil tukin base dari ref_tunjangan_kinerja
-        private Task<decimal> GetTukinBaseAmountForUserAsync(Guid userId)
-            => _tunjanganService.GetTukinBaseAmountForUserAsync(userId);
+        private async Task<decimal> GetTukinBaseAmountForUserAsync(Guid userId)
+        {
+            var hasGrade = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Guid == userId)
+                .Select(u => u.KelasJabatan.HasValue)
+                .FirstOrDefaultAsync();
+
+            if (!hasGrade)
+                return 0m;
+
+            return await _tunjanganService.GetTukinBaseAmountForUserAsync(userId);
+        }
 
         // Centralized validation for coordinates + geofence
         private async Task ValidateLocationAsync(double latitude, double longitude)
