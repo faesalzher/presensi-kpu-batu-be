@@ -237,8 +237,8 @@ public class LeaveRequestService : ILeaveRequestService
                     _context.AttendanceViolation.RemoveRange(existingViolations);
 
                 attendance.Status = mappedStatus;
-                attendance.CheckInTime = null;
-                attendance.CheckOutTime = null;
+                //attendance.CheckInTime = null;
+                //attendance.CheckOutTime = null;
                 attendance.WorkHours = 0m;
                 attendance.LateMinutes = null;
                 attendance.CheckInNotes = null;
