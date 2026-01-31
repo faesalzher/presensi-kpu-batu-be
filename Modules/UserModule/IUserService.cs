@@ -12,5 +12,8 @@ namespace presensi_kpu_batu_be.Modules.UserModule
 
         // Returns active users belonging to a specific department (projected to UserResponse)
         Task<List<UserResponse>> GetUsersByDepartmentAsync(Guid departmentId);
+
+        // Returns active users belonging to a specific department by name (projected to UserResponse)
+        Task<List<UserResponse>> GetUsersByDepartmentNameAsync(string departmentName);
     }
 }

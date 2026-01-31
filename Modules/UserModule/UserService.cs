@@ -110,5 +110,25 @@ namespace presensi_kpu_batu_be.Modules.UserModule
                 .OrderBy(u => u.FullName)
                 .ToListAsync();
         }
+
+        public async Task<List<UserResponse>> GetUsersByDepartmentNameAsync(string departmentName)
+        {
+            if (string.IsNullOrWhiteSpace(departmentName))
+                return new List<UserResponse>();
+
+            var normalized = departmentName.Trim();
+
+            // resolve department id first (safer than joining on name)
+            var departmentId = await _context.Department
+                .AsNoTracking()
+                .Where(d => d.Name != null && d.Name.ToLower() == normalized.ToLower())
+                .Select(d => (Guid?)d.Guid)
+                .FirstOrDefaultAsync();
+
+            if (departmentId == null)
+                return new List<UserResponse>();
+
+            return await GetUsersByDepartmentAsync(departmentId.Value);
+        }
     }
 }

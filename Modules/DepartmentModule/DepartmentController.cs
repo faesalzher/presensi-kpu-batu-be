@@ -54,17 +54,16 @@ namespace presensi_kpu_batu_be.Modules.DepartmentModule
             return Ok(departments);
         }
 
-        // GET /users/by-department/{department}
-        // Returns active users for the given department (admin & kasubag only)
-        [Authorize(Roles = "ADMIN,KASUBAG")]
-        [HttpGet("/users/by-department/{department}")]
-        public async Task<IActionResult> GetUsersByDepartment(string department)
-        {
-            if (!Guid.TryParse(department, out var deptGuid))
-                return BadRequest("Invalid department id format");
+        //// GET /users/by-department/{department}
+        //// Returns active users for the given department (admin & kasubag only)
+        //[HttpGet("/users/by-department/{department}")]
+        //public async Task<IActionResult> GetUsersByDepartment(string department)
+        //{
+        //    if (!Guid.TryParse(department, out var deptGuid))
+        //        return BadRequest("Invalid department id format");
 
-            var users = await _userService.GetUsersByDepartmentAsync(deptGuid);
-            return Ok(users);
-        }
+        //    var users = await _userService.GetUsersByDepartmentAsync(deptGuid);
+        //    return Ok(users);
+        //}
     }
 }

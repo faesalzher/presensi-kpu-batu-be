@@ -60,4 +60,13 @@ public class UserContoller : ControllerBase
         var users = await iUserService.GetAllActiveUsersAsync();
         return Ok(users);
     }
+
+    // GET /users/by-department-name/{departmentName}
+    // departmentName may contain spaces as %20 (ASP.NET Core will decode it)
+    [HttpGet("/users/by-department/{departmentName}")]
+    public async Task<IActionResult> GetUsersByDepartmentName(string departmentName)
+    {
+        var users = await iUserService.GetUsersByDepartmentNameAsync(departmentName);
+        return Ok(users);
+    }
 }
