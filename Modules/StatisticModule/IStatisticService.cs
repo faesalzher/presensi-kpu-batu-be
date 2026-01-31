@@ -6,5 +6,6 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
     {
         Task<StatisticSummary> GetStatisticAsync(StatisticQueryParams query);
         Task<TukinSummary> GetMyTukinSummaryAsync(Guid userId, DateOnly startDate, DateOnly endDate);
+        Task<BulkReportResponseDto> GenerateBulkAttendanceReportAsync(GenerateBulkReportDto dto, Guid currentUserId);
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using presensi_kpu_batu_be.Modules.StatisticModule.Dto;
+using System.Security.Claims;
 
 namespace presensi_kpu_batu_be.Modules.StatisticModule
 {
@@ -48,6 +49,28 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
             var result = await _statisticService.GetMyTukinSummaryAsync(userId, start, end);
             return Ok(result);
+        }
+
+        // POST /statistic/bulk-report
+        [HttpPost("generate-bulk-report")]
+        public async Task<IActionResult> GenerateBulkReport([FromBody] GenerateBulkReportDto request)
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value
+                ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var currentUserId = Guid.Parse(userIdClaim);
+
+            var result = await _statisticService.GenerateBulkAttendanceReportAsync(request, currentUserId);
+
+            return Ok(new
+            {
+                success = true,
+                message = "Report generated",
+                data = result
+            });
         }
     }
 }
