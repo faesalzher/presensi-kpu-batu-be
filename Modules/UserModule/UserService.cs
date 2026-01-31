@@ -31,6 +31,7 @@ namespace presensi_kpu_batu_be.Modules.UserModule
                         PhoneNumber = u.PhoneNumber,
                         ProfileImageUrl = u.ProfileImageUrl,
                         Role = u.Role,
+                        Duk = u.Duk,
                         DepartmentId = u.DepartmentId,
                         Department = d.Name,
                         Position = u.Position,
@@ -70,12 +71,16 @@ namespace presensi_kpu_batu_be.Modules.UserModule
                         PhoneNumber = x.u.PhoneNumber,
                         ProfileImageUrl = x.u.ProfileImageUrl,
                         Role = x.u.Role,
+                        Duk = x.u.Duk,
                         DepartmentId = x.u.DepartmentId,
                         Department = d != null ? d.Name : null,
                         Position = x.u.Position,
                         IsActive = x.u.IsActive
                     }
                 )
+                .OrderBy(u => u.Duk == null)
+                .ThenBy(u => u.Duk)
+                .ThenBy(u => u.FullName)
                 .ToListAsync();
         }
 
@@ -101,13 +106,16 @@ namespace presensi_kpu_batu_be.Modules.UserModule
                         PhoneNumber = x.u.PhoneNumber,
                         ProfileImageUrl = x.u.ProfileImageUrl,
                         Role = x.u.Role,
+                        Duk = x.u.Duk,
                         DepartmentId = x.u.DepartmentId,
                         Department = d != null ? d.Name : null,
                         Position = x.u.Position,
                         IsActive = x.u.IsActive
                     }
                 )
-                .OrderBy(u => u.FullName)
+                .OrderBy(u => u.Duk == null)
+                .ThenBy(u => u.Duk)
+                .ThenBy(u => u.FullName)
                 .ToListAsync();
         }
 

@@ -16,6 +16,8 @@
 
         public string? Role { get; set; }
 
+        public int? Duk { get; set; }
+
         // 🔥 ini yang FE butuhkan
         public Guid? DepartmentId { get; set; }
         public string? Department { get; set; }

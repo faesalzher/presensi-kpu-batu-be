@@ -17,6 +17,51 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             _context = context;
         }
 
+        private static string MapStatusLabel(string? status)
+        {
+            return status?.Trim().ToUpperInvariant() switch
+            {
+                nameof(WorkingStatus.PRESENT) => "HADIR",
+                nameof(WorkingStatus.OFFICIAL_TRAVEL) => "DINAS LUAR",
+                nameof(WorkingStatus.SICK) => "SAKIT",
+                nameof(WorkingStatus.PROBLEM) => "MASALAH PRESENSI",
+                nameof(WorkingStatus.ON_LEAVE) => "CUTI",
+                nameof(WorkingStatus.ABSENT) => "ABSEN",
+                _ => status ?? string.Empty
+            };
+        }
+
+        private async Task<TimeZoneInfo> GetTimeZoneAsync()
+        {
+            try
+            {
+                var timezoneId = await _context.GeneralSetting
+                    .AsNoTracking()
+                    .Where(x => x.Code == presensi_kpu_batu_be.Common.Constants.GeneralSettingCodes.TIMEZONE)
+                    .Select(x => x.Value)
+                    .FirstOrDefaultAsync();
+
+                if (string.IsNullOrWhiteSpace(timezoneId))
+                    return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+
+                return TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+        }
+
+        private static string FormatTimeHm(DateTime? utc, TimeZoneInfo tz)
+        {
+            if (!utc.HasValue)
+                return "-";
+
+            var utcTime = DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc);
+            var local = TimeZoneInfo.ConvertTimeFromUtc(utcTime, tz);
+            return local.ToString("HH:mm");
+        }
+
         public async Task<StatisticSummary> GetStatisticAsync(
             StatisticQueryParams query)
         {
@@ -285,8 +330,11 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             if (!dto.IncludeInactive)
                 usersQuery = usersQuery.Where(u => u.IsActive);
 
+            // Order by DUK first (nulls last), then name
             return await usersQuery
-                .OrderBy(u => u.FullName)
+                .OrderBy(u => u.Duk == null)
+                .ThenBy(u => u.Duk)
+                .ThenBy(u => u.FullName)
                 .ToListAsync();
         }
 
@@ -306,28 +354,28 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Cell(1, 1).Style.Font.FontSize = 16;
             ws.Cell(1, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell(2, 1).Value = $"Period: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
+            ws.Cell(2, 1).Value = $"Periode: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
             ws.Range(2, 1, 2, 12).Merge();
             ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell(3, 1).Value = $"Scope: {scope.ToString().Replace('_', ' ')}";
+            ws.Cell(3, 1).Value = $"Cakupan: {scope.ToString().Replace('_', ' ')}";
             ws.Range(3, 1, 3, 12).Merge();
             ws.Cell(3, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             var headers = new[]
             {
-                "Employee Name",
+                "Nama Pegawai",
                 "NIP",
-                "Department",
-                "Total Days",
-                "Present",
-                "Absent",
-                "Problem",
-                "Sick",
-                "On Leave",
-                "Official Travel",
-                "Total Attendances",
-                "Attendance Rate",
+                "Sub Bagian",
+                "Jumlah Hari",
+                "Hadir",
+                "Absen",
+                "Masalah Presensi",
+                "Sakit",
+                "Cuti",
+                "Dinas Luar",
+                "Total Presensi",
+                "Rate Kehadiran",
             };
 
             var headerRow = 5;
@@ -383,6 +431,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             DateOnly startDate,
             DateOnly endDate)
         {
+            var tz = await GetTimeZoneAsync();
+
             var deptName = user.DepartmentId.HasValue
                 ? await _context.Department.AsNoTracking().Where(d => d.Guid == user.DepartmentId.Value).Select(d => d.Name).FirstOrDefaultAsync()
                 : null;
@@ -410,16 +460,16 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Cell(1, 1).Style.Font.FontSize = 16;
             ws.Cell(1, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell(2, 1).Value = $"Department: {deptName ?? "Unknown"}";
+            ws.Cell(2, 1).Value = $"Sub Bagian: {deptName ?? "Unknown"}";
             ws.Range(2, 1, 2, 8).Merge();
             ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell(3, 1).Value = $"Period: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
+            ws.Cell(3, 1).Value = $"Periode: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
             ws.Range(3, 1, 3, 8).Merge();
             ws.Cell(3, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             var row = 5;
-            ws.Cell(row, 1).Value = "Summary";
+            ws.Cell(row, 1).Value = "Ringkasan";
             ws.Range(row, 1, row, 8).Merge();
             ws.Cell(row, 1).Style.Font.Bold = true;
             ws.Cell(row, 1).Style.Font.FontSize = 14;
@@ -431,16 +481,16 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
             var summary = new (string Label, object? Value)[]
             {
-                ("Total Days", statistic.TotalDays),
-                ("Present Days", statistic.Present),
-                ("Absent Days", statistic.Absent),
-                ("Problem Days", statistic.Problem),
-                ("Sick Days", statistic.Sick),
-                ("On Leave", statistic.OnLeave),
-                ("Official Travel", statistic.OfficialTravel),
-                ("Total Work Hours", statistic.TotalWorkHours),
-                ("Average Work Hours/Day", statistic.AverageWorkHours),
-                ("Attendance Rate", attendanceRate),
+                ("Jumlah Hari", statistic.TotalDays),
+                ("Hadir", statistic.Present),
+                ("Absen", statistic.Absent),
+                ("Masalah Presensi", statistic.Problem),
+                ("Sakit", statistic.Sick),
+                ("Cuti", statistic.OnLeave),
+                ("Dinas Luar", statistic.OfficialTravel),
+                ("Total Jam Kerja", statistic.TotalWorkHours),
+                ("Rata Rata Jam Kerja", statistic.AverageWorkHours),
+                ("Rate Kehadiran", attendanceRate),
             };
 
             foreach (var (label, val) in summary)
@@ -452,8 +502,40 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
             if (statistic.Records != null && statistic.Records.Count > 0)
             {
+                // Load details (checkin/checkout + violations notes) for the same date range/user
+                var attendanceDetails = await _context.Attendance
+                    .AsNoTracking()
+                    .Where(a => a.UserId == user.Guid && a.Date >= startDate && a.Date <= endDate)
+                    .OrderBy(a => a.Date)
+                    .Select(a => new
+                    {
+                        a.Date,
+                        a.CheckInTime,
+                        a.CheckOutTime,
+                        a.Status,
+                        a.WorkHours,
+                        ViolationNotes = a.Violation
+                            .OrderBy(v => v.OccurredAt)
+                            .Select(v => v.Notes)
+                            .ToList()
+                    })
+                    .ToListAsync();
+
+                var detailMap = attendanceDetails
+                    .ToDictionary(
+                        x => x.Date,
+                        x => new
+                        {
+                            x.CheckInTime,
+                            x.CheckOutTime,
+                            Status = x.Status.ToString(),
+                            x.WorkHours,
+                            Notes = string.Join(", ", x.ViolationNotes.Where(n => !string.IsNullOrWhiteSpace(n)))
+                        }
+                    );
+
                 row += 2;
-                ws.Cell(row, 1).Value = "Detailed Records";
+                ws.Cell(row, 1).Value = "Detail Presensi";
                 ws.Range(row, 1, row, 8).Merge();
                 ws.Cell(row, 1).Style.Font.Bold = true;
                 ws.Cell(row, 1).Style.Font.FontSize = 14;
@@ -461,10 +543,12 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
                 var headers = new[]
                 {
-                    "Date",
+                    "Tanggal",
                     "Status",
-                    "Work Hours",
-                    "Guid",
+                    "Jam Masuk",
+                    "Jam Pulang",
+                    "Jumlah Jam Kerja",
+                    "Keterangan",
                 };
 
                 for (var i = 0; i < headers.Length; i++)
@@ -476,12 +560,17 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
                 row++;
 
-                foreach (var rec in statistic.Records)
+                foreach (var rec in statistic.Records.OrderBy(r => r.Date))
                 {
+                    detailMap.TryGetValue(rec.Date, out var detail);
+
                     ws.Cell(row, 1).Value = rec.Date.ToString("yyyy-MM-dd");
-                    ws.Cell(row, 2).Value = rec.Status;
-                    ws.Cell(row, 3).Value = rec.WorkHours;
-                    ws.Cell(row, 4).Value = rec.Guid.ToString();
+                    ws.Cell(row, 2).Value = MapStatusLabel(detail?.Status ?? rec.Status);
+                    ws.Cell(row, 3).Value = FormatTimeHm(detail?.CheckInTime, tz);
+                    ws.Cell(row, 4).Value = FormatTimeHm(detail?.CheckOutTime, tz);
+                    ws.Cell(row, 5).Value = (detail?.WorkHours ?? rec.WorkHours)?.ToString() ?? "-";
+                    ws.Cell(row, 6).Value = string.IsNullOrWhiteSpace(detail?.Notes) ? "" : detail.Notes;
+
                     row++;
                 }
             }
@@ -496,7 +585,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             DateOnly endDate,
             string title)
         {
-            var ws = workbook.Worksheets.Add("Consolidated Report");
+            var ws = workbook.Worksheets.Add("Laporan Gabungan");
 
             ws.Cell(1, 1).Value = title;
             ws.Range(1, 1, 1, 11).Merge();
@@ -504,7 +593,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Cell(1, 1).Style.Font.FontSize = 16;
             ws.Cell(1, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell(2, 1).Value = $"Period: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
+            ws.Cell(2, 1).Value = $"Periode: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
             ws.Range(2, 1, 2, 11).Merge();
             ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -524,15 +613,15 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
                 var summary = new (string Label, object? Value)[]
                 {
-                    ("Total Days", stat.TotalDays),
-                    ("Present", stat.Present),
-                    ("Absent", stat.Absent),
-                    ("Problem", stat.Problem),
-                    ("Sick", stat.Sick),
-                    ("On Leave", stat.OnLeave),
-                    ("Official Travel", stat.OfficialTravel),
-                    ("Total Attendances", stat.TotalAttendances),
-                    ("Attendance Rate", attendanceRate),
+                    ("Jumlah Hari", stat.TotalDays),
+                    ("Hadir", stat.Present),
+                    ("Absen", stat.Absent),
+                    ("Masalah Presensi", stat.Problem),
+                    ("Sakit", stat.Sick),
+                    ("Cuti", stat.OnLeave),
+                    ("Dinas Luar", stat.OfficialTravel),
+                    ("Total Presensi", stat.TotalAttendances),
+                    ("Rate Kehadiran", attendanceRate),
                 };
 
                 foreach (var (label, value) in summary)

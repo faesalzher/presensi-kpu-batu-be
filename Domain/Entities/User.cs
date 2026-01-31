@@ -43,6 +43,9 @@ public class User : BaseEntity
     [Column("kelas_jabatan")]
     public int? KelasJabatan { get; set; }
 
+    [Column("duk")]
+    public int? Duk { get; set; }
+
     [Column("is_active")]
     public bool IsActive { get; set; }
 }
