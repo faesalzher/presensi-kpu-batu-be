@@ -1,4 +1,4 @@
-using Application.Common.Exceptions;
+﻿using Application.Common.Exceptions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +12,9 @@ using presensi_kpu_batu_be.Modules.UserModule;
 using presensi_kpu_batu_be.Modules.TunjanganModule;
 using System.Text;
 using presensi_kpu_batu_be.Modules.SystemSettingModule;
+using presensi_kpu_batu_be.Modules.PushNotificationModule;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 // === FIX WAJIB UNTUK SUPABASE POOLER ===
 // Matikan prepared statements di Npgsql (ini penyebab API lambat panggilan kedua)
@@ -26,6 +29,33 @@ builder.Configuration
        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
        .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
        .AddEnvironmentVariables();
+
+
+// ======================================================
+// 🔥 FIREBASE ADMIN SDK (FINAL & AMAN)
+// ======================================================
+var firebaseCredPath = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
+
+if (string.IsNullOrWhiteSpace(firebaseCredPath))
+{
+    throw new InvalidOperationException(
+        "GOOGLE_APPLICATION_CREDENTIALS belum diset. Firebase tidak bisa jalan."
+    );
+}
+
+if (!File.Exists(firebaseCredPath))
+{
+    throw new FileNotFoundException(
+        $"Firebase service account file tidak ditemukan: {firebaseCredPath}"
+    );
+}
+
+FirebaseApp.Create(new AppOptions
+{
+    Credential = GoogleCredential.FromFile(firebaseCredPath)
+});
+
+Console.WriteLine($"[Firebase] Initialized using {firebaseCredPath}");
 
 // Ambil connection string
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
@@ -76,6 +106,7 @@ builder.Services.AddCors(options =>
         policy
             .WithOrigins(
             "http://localhost:5173",
+            "https://localhost:5173",
             "https://absensi-test-one-fe.vercel.app",
             "https://presensi-kpu-batu.vercel.app",
             "http://160.19.166.186",
@@ -170,7 +201,8 @@ builder.Services.AddScoped<IStatisticService, StatisticService>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<ITunjanganService, TunjanganService>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
-
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<PushSenderService>();
 
 var app = builder.Build();
 

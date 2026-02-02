@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<FileMetadata> FileMetadata { get; set; }
     public DbSet<RefTunjanganKinerja> RefTunjanganKinerja { get; set; }
     public DbSet<SchedulerLog> SchedulerLogs { get; set; }
+    public DbSet<UserFcmToken> UserFcmTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,22 @@ public class AppDbContext : DbContext
         {
             builder.Property(x => x.Category)
                    .HasConversion<string>();
+        });
+
+        modelBuilder.Entity<UserFcmToken>(builder =>
+        {
+            builder.ToTable("user_fcm_tokens");
+            builder.HasKey(x => x.Guid);
+
+            builder.Property(x => x.Guid).HasColumnName("guid");
+            builder.Property(x => x.UserId).HasColumnName("user_id");
+            builder.Property(x => x.FcmToken).HasColumnName("fcm_token");
+            builder.Property(x => x.DeviceId).HasColumnName("device_id");
+            builder.Property(x => x.IsActive).HasColumnName("is_active");
+            builder.Property(x => x.CreatedAt).HasColumnName("created_at");
+            builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            builder.HasIndex(x => x.IsActive);
         });
     }
 
