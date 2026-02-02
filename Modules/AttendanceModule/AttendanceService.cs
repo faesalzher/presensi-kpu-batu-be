@@ -366,7 +366,12 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                             v.Type == AttendanceViolationType.LATE);
 
                     if (lateViolation != null)
+                    {
                         _context.AttendanceViolation.Remove(lateViolation);
+
+                        // Ubah status attendance jika violation sudah dihapus
+                        attendance.Status = WorkingStatus.PRESENT;
+                    }
                 }
             }
             else
