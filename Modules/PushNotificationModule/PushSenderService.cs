@@ -35,6 +35,29 @@ public class PushSenderService
         return await FirebaseMessaging.DefaultInstance.SendAsync(message);
     }
 
+    public async Task<string> SendDataMessageAsync(string fcmToken, string title, string body, string type)
+    {
+        var message = new Message
+        {   
+            Token = fcmToken,
+            Data = new Dictionary<string, string>
+            {
+                ["title"] = title,
+                ["body"] = body,
+                ["type"] = type
+            },
+            Webpush = new WebpushConfig
+            {
+                Headers = new Dictionary<string, string>
+                {
+                    ["TTL"] = "300",
+                    ["Urgency"] = "high"
+                }
+            }
+        };
+
+        return await FirebaseMessaging.DefaultInstance.SendAsync(message);
+    }
 
     private static string Prefix(string token)
     {

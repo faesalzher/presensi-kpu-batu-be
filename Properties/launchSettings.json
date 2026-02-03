@@ -34,7 +34,8 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "GOOGLE_APPLICATION_CREDENTIALS": "C:\\Users\\KPU BATU\\Downloads\\presnesi-kpu-batu-firebase-adminsdk-fbsvc-37ff778958.json"
       }
     }
   }
