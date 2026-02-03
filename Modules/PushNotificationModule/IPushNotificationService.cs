@@ -6,4 +6,5 @@ public interface IPushNotificationService
 {
     Task RegisterAsync(Guid userId, RegisterPushTokenDto dto);
     Task UnregisterAsync(Guid userId);
+    Task<PushRegistrationStatusResponse> GetRegistrationStatusAsync(string deviceId);
 }

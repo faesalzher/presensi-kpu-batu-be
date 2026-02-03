@@ -93,4 +93,34 @@ public class PushNotificationService : IPushNotificationService
 
         await _context.SaveChangesAsync();
     }
+
+    public async Task<PushRegistrationStatusResponse> GetRegistrationStatusAsync(string deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+            throw new ArgumentException("DeviceId is required", nameof(deviceId));
+
+        var trimmedDeviceId = deviceId.Trim();
+
+        var registration = await _context.UserFcmTokens
+            .Where(t => t.DeviceId == trimmedDeviceId && t.IsActive)
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (registration == null)
+        {
+            return new PushRegistrationStatusResponse
+            {
+                IsRegistered = false,
+                DeviceId = null,
+                RegisteredAt = null
+            };
+        }
+
+        return new PushRegistrationStatusResponse
+        {
+            IsRegistered = true,
+            DeviceId = registration.DeviceId,
+            RegisteredAt = registration.CreatedAt
+        };
+    }
 }

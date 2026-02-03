@@ -36,6 +36,16 @@ public class PushController : ControllerBase
         return Ok(new { success = true });
     }
 
+    [HttpGet("register/status")]
+    public async Task<IActionResult> GetRegistrationStatus([FromQuery] string deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return BadRequest(new { message = "deviceId parameter is required" });
+
+        var status = await _pushService.GetRegistrationStatusAsync(deviceId);
+        return Ok(status);
+    }
+
     private bool TryGetUserGuid(out Guid userId)
     {
         userId = default;
