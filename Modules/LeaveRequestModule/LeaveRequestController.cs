@@ -26,7 +26,7 @@ namespace presensi_kpu_batu_be.Modules.LeaveRequestModule
             _configuration = configuration;
             _leaveRequestService = leaveRequestService;
         }
-
+ 
         [HttpPost]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> Create(
@@ -66,10 +66,30 @@ namespace presensi_kpu_batu_be.Modules.LeaveRequestModule
             if (string.IsNullOrEmpty(userIdClaim))
                 return Unauthorized();
 
-            var userId = Guid.Parse(userIdClaim);
-
-            var result = await _leaveRequestService.GetByGuidAsync(guid, userId);
+            var result = await _leaveRequestService.GetByGuidAsync(guid);
             return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpGet("pending")]
+        public async Task<IActionResult> GetPending([FromQuery] Guid? departmentId)
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var result = await _leaveRequestService.GetPendingLeaveRequestsAsync(departmentId);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll([FromQuery] QueryLeaveRequestsDto? query)
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var result = await _leaveRequestService.QueryLeaveRequestsAsync(query);
+            return Ok(result);
         }
     }
 }

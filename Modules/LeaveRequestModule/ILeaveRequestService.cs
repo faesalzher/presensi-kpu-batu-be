@@ -7,6 +7,9 @@ public interface ILeaveRequestService
     Task<List<Guid>> GetUserIdsOnLeaveAsync(DateOnly date);
     Task<List<LeaveRequestResponseDto>> GetMyLeaveRequests(Guid userId);
 
-    // Get a single leave request by its guid (scoped to requesting user)
-    Task<LeaveRequestResponseDto?> GetByGuidAsync(Guid guid, Guid userId);
+    // Get a single leave request by its guid
+    Task<LeaveRequestResponseDto?> GetByGuidAsync(Guid guid);
+
+    Task<List<LeaveRequestResponseDto>> GetPendingLeaveRequestsAsync(Guid? departmentId);
+    Task<List<LeaveRequestResponseDto>> QueryLeaveRequestsAsync(QueryLeaveRequestsDto? query);
 }

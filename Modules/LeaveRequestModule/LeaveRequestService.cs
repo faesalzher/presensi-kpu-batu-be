@@ -322,41 +322,184 @@ public class LeaveRequestService : ILeaveRequestService
             }).ToList();
         }
 
-        // New: get single leave request by guid (scoped to requesting user)
-        public async Task<LeaveRequestResponseDto?> GetByGuidAsync(Guid guid, Guid userId)
+        // New: get single leave request by guid
+        public async Task<LeaveRequestResponseDto?> GetByGuidAsync(Guid guid)
         {
-            var result = await _context.LeaveRequest
-                .Where(l => l.Guid == guid && l.UserId == userId)
-                .Select(l => new LeaveRequestResponseDto
-            {
-                Guid = l.Guid,
-                UserId = l.UserId,
-                DepartmentId = l.DepartmentId,
-                Type = l.Type.ToString(),
-                Status = l.Status.ToString(),
+            var row = await _context.LeaveRequest
+                .AsNoTracking()
+                .Where(l => l.Guid == guid)
+                .GroupJoin(
+                    _context.Users.AsNoTracking(),
+                    l => l.UserId,
+                    u => u.Guid,
+                    (l, users) => new { l, users }
+                )
+                .SelectMany(
+                    x => x.users.DefaultIfEmpty(),
+                    (x, u) => new { Leave = x.l, User = u }
+                )
+                .Select(x => new LeaveRequestResponseDto
+                {
+                    Guid = x.Leave.Guid,
+                    UserId = x.Leave.UserId,
+                    DepartmentId = x.Leave.DepartmentId,
+                    UserName = x.User != null ? x.User.FullName : null,
+                    Nip = x.User != null ? x.User.Nip : null,
+                    ProfileImageUrl = x.User != null ? x.User.ProfileImageUrl : null,
+                    Type = x.Leave.Type.ToString(),
+                    Status = x.Leave.Status.ToString(),
+                    StartDate = x.Leave.StartDate.ToDateTime(TimeOnly.MinValue),
+                    EndDate = x.Leave.EndDate.ToDateTime(TimeOnly.MinValue),
+                    Reason = x.Leave.Reason,
+                    Attachment = _context.FileMetadata
+                        .Where(f => f.RelatedId == x.Leave.Guid && f.Category == FileCategory.PERMISSION && !f.IsTemporary)
+                        .OrderByDescending(f => f.CreatedAt)
+                        .Select(f => new FileMetadataDto
+                        {
+                            Guid = f.Guid,
+                            FileName = f.FileName,
+                            OriginalName = f.OriginalName,
+                            MimeType = f.MimeType,
+                            Size = f.Size,
+                            Path = f.Path,
+                            Category = f.Category
+                        })
+                        .FirstOrDefault()
+                })
+                .FirstOrDefaultAsync();
 
-                StartDate = l.StartDate.ToDateTime(TimeOnly.MinValue),
-                EndDate = l.EndDate.ToDateTime(TimeOnly.MinValue),
+            return row;
+        }
 
-                Reason = l.Reason,
+    public async Task<List<LeaveRequestResponseDto>> GetPendingLeaveRequestsAsync(Guid? departmentId)
+    {
+        var q = _context.LeaveRequest.AsNoTracking()
+            .Where(l => l.Status == LeaveRequestStatus.PENDING);
 
-                Attachment = _context.FileMetadata
-                    .Where(f => f.RelatedId == l.Guid && f.Category == FileCategory.PERMISSION && !f.IsTemporary)
-                    .OrderByDescending(f => f.CreatedAt)
-                    .Select(f => new FileMetadataDto
-                    {
-                        Guid = f.Guid,
-                        FileName = f.FileName,
-                        OriginalName = f.OriginalName,
-                        MimeType = f.MimeType,
-                        Size = f.Size,
-                        Path = f.Path,
-                        Category = f.Category
-                    })
-                    .FirstOrDefault()
-            })
-            .FirstOrDefaultAsync();
+        if (departmentId.HasValue)
+            q = q.Where(l => l.DepartmentId == departmentId.Value);
 
-        return result;
+        var data = await q.OrderByDescending(l => l.CreatedAt).ToListAsync();
+
+        return data.Select(x => new LeaveRequestResponseDto
+        {
+            Guid = x.Guid,
+            UserId = x.UserId,
+            DepartmentId = x.DepartmentId,
+            Type = x.Type.ToString(),
+            Status = x.Status.ToString(),
+            StartDate = x.StartDate.ToDateTime(TimeOnly.MinValue),
+            EndDate = x.EndDate.ToDateTime(TimeOnly.MinValue),
+            Reason = x.Reason,
+            Attachment = _context.FileMetadata
+                .Where(f => f.RelatedId == x.Guid && f.Category == FileCategory.PERMISSION && !f.IsTemporary)
+                .OrderByDescending(f => f.CreatedAt)
+                .Select(f => new FileMetadataDto
+                {
+                    Guid = f.Guid,
+                    FileName = f.FileName,
+                    OriginalName = f.OriginalName,
+                    MimeType = f.MimeType,
+                    Size = f.Size,
+                    Path = f.Path,
+                    Category = f.Category
+                })
+                .FirstOrDefault()
+        }).ToList();
+    }
+
+    public async Task<List<LeaveRequestResponseDto>> QueryLeaveRequestsAsync(QueryLeaveRequestsDto? query)
+    {
+        var q = _context.LeaveRequest.AsNoTracking().AsQueryable();
+
+        if (query?.UserId is { } userId)
+            q = q.Where(l => l.UserId == userId);
+
+        if (query?.DepartmentId is { } deptId)
+            q = q.Where(l => l.DepartmentId == deptId);
+
+        if (query?.Type is { Count: > 0 } types)
+        {
+            var parsedTypes = new HashSet<LeaveRequestType>();
+            foreach (var t in types.Where(x => !string.IsNullOrWhiteSpace(x)))
+                if (Enum.TryParse<LeaveRequestType>(t, true, out var parsed))
+                    parsedTypes.Add(parsed);
+
+            if (parsedTypes.Count > 0)
+                q = q.Where(l => parsedTypes.Contains(l.Type));
+            else
+                q = q.Where(_ => false);
+        }
+
+        if (query?.Status is { Count: > 0 } statuses)
+        {
+            var parsedStatuses = new HashSet<LeaveRequestStatus>();
+            foreach (var s in statuses.Where(x => !string.IsNullOrWhiteSpace(x)))
+                if (Enum.TryParse<LeaveRequestStatus>(s, true, out var parsed))
+                    parsedStatuses.Add(parsed);
+
+            if (parsedStatuses.Count > 0)
+                q = q.Where(l => parsedStatuses.Contains(l.Status));
+            else
+                q = q.Where(_ => false);
+        }
+
+        DateOnly? startFrom = query?.StartDateFrom is { } sdf ? DateOnly.FromDateTime(sdf.ToUniversalTime()) : null;
+        DateOnly? startTo = query?.StartDateTo is { } sdt ? DateOnly.FromDateTime(sdt.ToUniversalTime()) : null;
+        DateOnly? endFrom = query?.EndDateFrom is { } edf ? DateOnly.FromDateTime(edf.ToUniversalTime()) : null;
+        DateOnly? endTo = query?.EndDateTo is { } edt ? DateOnly.FromDateTime(edt.ToUniversalTime()) : null;
+
+        if (startFrom.HasValue)
+            q = q.Where(l => l.StartDate >= startFrom.Value);
+        if (startTo.HasValue)
+            q = q.Where(l => l.StartDate <= startTo.Value);
+
+        if (endFrom.HasValue)
+            q = q.Where(l => l.EndDate >= endFrom.Value);
+        if (endTo.HasValue)
+            q = q.Where(l => l.EndDate <= endTo.Value);
+
+        var rows = await q
+            .OrderByDescending(l => l.CreatedAt)
+            .GroupJoin( 
+                _context.Users.AsNoTracking(),
+                l => l.UserId,
+                u => u.Guid,
+                (l, users) => new { l, users }
+            )
+            .SelectMany(
+                x => x.users.DefaultIfEmpty(),
+                (x, u) => new { Leave = x.l, User = u }
+            )
+            .ToListAsync();
+
+        return rows.Select(x => new LeaveRequestResponseDto
+        {
+            Guid = x.Leave.Guid,
+            UserId = x.Leave.UserId,
+            DepartmentId = x.Leave.DepartmentId,
+            UserName = x.User != null ? x.User.FullName : null,
+            Nip = x.User != null ? x.User.Nip : null,
+            ProfileImageUrl = x.User != null ? x.User.ProfileImageUrl : null,
+            Type = x.Leave.Type.ToString(),
+            Status = x.Leave.Status.ToString(),
+            StartDate = x.Leave.StartDate.ToDateTime(TimeOnly.MinValue),
+            EndDate = x.Leave.EndDate.ToDateTime(TimeOnly.MinValue),
+            Reason = x.Leave.Reason,
+            Attachment = _context.FileMetadata
+                .Where(f => f.RelatedId == x.Leave.Guid && f.Category == FileCategory.PERMISSION && !f.IsTemporary)
+                .OrderByDescending(f => f.CreatedAt)
+                .Select(f => new FileMetadataDto
+                {
+                    Guid = f.Guid,
+                    FileName = f.FileName,
+                    OriginalName = f.OriginalName,
+                    MimeType = f.MimeType,
+                    Size = f.Size,
+                    Path = f.Path,
+                    Category = f.Category
+                })
+                .FirstOrDefault()
+        }).ToList();
     }
 }
