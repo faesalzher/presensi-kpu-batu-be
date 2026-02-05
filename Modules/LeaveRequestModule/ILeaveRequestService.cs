@@ -12,4 +12,5 @@ public interface ILeaveRequestService
 
     Task<List<LeaveRequestResponseDto>> GetPendingLeaveRequestsAsync(Guid? departmentId);
     Task<List<LeaveRequestResponseDto>> QueryLeaveRequestsAsync(QueryLeaveRequestsDto? query);
+    Task<LeaveRequest> ReviewAsync(Guid guid, ReviewLeaveRequestDto dto, Guid reviewerUserId);
 }

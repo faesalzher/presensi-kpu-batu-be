@@ -91,5 +91,18 @@ namespace presensi_kpu_batu_be.Modules.LeaveRequestModule
             var result = await _leaveRequestService.QueryLeaveRequestsAsync(query);
             return Ok(result);
         }
+
+        [HttpPost("{guid}/review")]
+        public async Task<IActionResult> Review(Guid guid, [FromBody] ReviewLeaveRequestDto dto)
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized();
+
+            var reviewerUserId = Guid.Parse(userIdClaim);
+
+            var result = await _leaveRequestService.ReviewAsync(guid, dto, reviewerUserId);
+            return Ok(result);
+        }
     }
 }

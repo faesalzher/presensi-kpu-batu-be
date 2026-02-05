@@ -18,6 +18,7 @@ namespace presensi_kpu_batu_be.Modules.LeaveRequestModule.Dto
         public DateTime EndDate { get; set; }
 
         public string? Reason { get; set; }
+        public string? Comments { get; set; }
         public FileMetadataDto? Attachment { get; set; }
     }
 }

@@ -40,6 +40,9 @@ public class LeaveRequest : BaseEntity
     [Column("reviewed_at")]
     public DateTime? ReviewedAt { get; set; }
 
+    [Column("comments")]
+    public string? Comments { get; set; }
+
     // ❗ tidak simpan attachment_id di sini
     // relasi via file_metadata.related_id
 }

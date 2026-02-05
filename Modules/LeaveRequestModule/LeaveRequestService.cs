@@ -73,6 +73,21 @@ public class LeaveRequestService : ILeaveRequestService
                 "Start date cannot be after end date");
 
         // =====================
+        // Validasi duplikasi pengajuan (PENDING/APPROVED) di range tanggal
+        // =====================
+        var hasActiveOverlap = await _context.LeaveRequest
+            .AsNoTracking()
+            .AnyAsync(l =>
+                l.UserId == userId &&
+                (l.Status == LeaveRequestStatus.PENDING || l.Status == LeaveRequestStatus.APPROVED) &&
+                l.StartDate <= dto.EndDate &&
+                l.EndDate >= dto.StartDate);
+
+        if (hasActiveOverlap)
+            throw new BadRequestException(
+                "Anda sudah memiliki pengajuan cuti PENDING/APPROVED pada rentang tanggal yang dipilih");
+
+        // =====================
         // Validasi hari libur
         // =====================
         var start = dto.StartDate;
@@ -137,7 +152,7 @@ public class LeaveRequestService : ILeaveRequestService
             UserId = userId,
             DepartmentId = dto.DepartmentId,
             Type = dto.Type,
-            Status = LeaveRequestStatus.APPROVED,
+            Status = LeaveRequestStatus.PENDING,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Reason = dto.Reason,
@@ -174,79 +189,7 @@ public class LeaveRequestService : ILeaveRequestService
 
         _context.FileMetadata.Add(fileMetadata);
 
-        // =====================
-        // Attendance adjustments for the leave period
-        // - create attendance for future dates (or today)
-        // - update existing attendances for past dates: set status according to leave type,
-        //   clear times and set work hours to 0, remove violations
-        // Note: map LeaveRequestType -> WorkingStatus based on available enum values.
-        // =====================
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        static WorkingStatus MapLeaveTypeToWorkingStatus(LeaveRequestType t) => t switch
-        {
-            LeaveRequestType.SICK => WorkingStatus.SICK,          // no explicit SICK in WorkingStatus -> use ON_LEAVE
-            LeaveRequestType.LEAVE => WorkingStatus.ON_LEAVE,
-            LeaveRequestType.DL => WorkingStatus.OFFICIAL_TRAVEL,
-            _ => WorkingStatus.ON_LEAVE
-        };
-
-        var mappedStatus = MapLeaveTypeToWorkingStatus(dto.Type);
-
-        foreach (var date in workingDates)
-        {
-            // single attendance per date per user
-            var attendance = await _context.Attendance
-                .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == date);
-
-            if (attendance == null)
-            {
-                // create attendance for the leave date (future, today or past)
-                attendance = new Attendance
-                {
-                    Guid = Guid.NewGuid(),
-                    UserId = userId,
-                    DepartmentId = dto.DepartmentId,
-                    Date = date,
-                    Status = mappedStatus,
-                    CheckInTime = null,
-                    CheckOutTime = null,
-                    WorkHours = 0m,
-                    LateMinutes = null
-                };
-
-                _context.Attendance.Add(attendance);
-
-                // remove any violations referencing this attendance (unlikely since new guid),
-                // but keep defensive: try to remove violations for same user/date (if any)
-                var orphanViolations = await _context.AttendanceViolation
-                    .Where(v => v.AttendanceId == attendance.Guid)
-                    .ToListAsync();
-
-                if (orphanViolations.Any())
-                    _context.AttendanceViolation.RemoveRange(orphanViolations);
-            }
-            else
-            {
-                // existing attendance: remove violations and update to leave status + clear times/works
-                var existingViolations = await _context.AttendanceViolation
-                    .Where(v => v.AttendanceId == attendance.Guid)
-                    .ToListAsync();
-
-                if (existingViolations.Any())
-                    _context.AttendanceViolation.RemoveRange(existingViolations);
-
-                attendance.Status = mappedStatus;
-                //attendance.CheckInTime = null;
-                //attendance.CheckOutTime = null;
-                attendance.WorkHours = 0m;
-                attendance.LateMinutes = null;
-                attendance.CheckInNotes = null;
-                attendance.CheckOutNotes = null;
-                attendance.CheckInPhotoId = null;
-                attendance.CheckOutPhotoId = null;
-            }
-        }
+        // NOTE: attendance adjustments moved to ReviewAsync when status becomes APPROVED
 
         await _context.SaveChangesAsync();
 
@@ -303,6 +246,7 @@ public class LeaveRequestService : ILeaveRequestService
                 EndDate = x.EndDate.ToDateTime(TimeOnly.MinValue),
 
                 Reason = x.Reason,
+                Comments = x.Comments,
 
                 // populate attachment from file_metadata (latest non-temporary PERMISSION)
                 Attachment = _context.FileMetadata
@@ -501,5 +445,106 @@ public class LeaveRequestService : ILeaveRequestService
                 })
                 .FirstOrDefault()
         }).ToList();
+    }
+
+    public async Task<LeaveRequest> ReviewAsync(Guid guid, ReviewLeaveRequestDto dto, Guid reviewerUserId)
+    {
+        var leave = await _context.LeaveRequest
+            .FirstOrDefaultAsync(l => l.Guid == guid);
+
+        if (leave == null)
+            throw new NotFoundException("Leave request not found");
+
+        if (leave.Status != LeaveRequestStatus.PENDING)
+            throw new BadRequestException("Leave request has already been reviewed");
+
+        leave.Status = dto.Status;
+        leave.ReviewedAt = DateTime.UtcNow;
+        leave.Comments = dto.Comments;
+        leave.UsrUpd = reviewerUserId.ToString();
+
+        if (dto.Status == LeaveRequestStatus.REJECTED)
+        {
+            await _context.SaveChangesAsync();
+            return leave;
+        }
+
+        if (dto.Status == LeaveRequestStatus.APPROVED)
+        {
+            var start = leave.StartDate;
+            var end = leave.EndDate;
+
+            var workingDates = new List<DateOnly>();
+            for (var date = start; date <= end; date = date.AddDays(1))
+            {
+                if (await _timeProviderService.IsWorkingDayAsync(date))
+                    workingDates.Add(date);
+            }
+
+            if (!workingDates.Any())
+                throw new BadRequestException(
+                    $"Tanggal {start:yyyy-MM-dd} s.d {end:yyyy-MM-dd} tidak memiliki hari kerja");
+
+            static WorkingStatus MapLeaveTypeToWorkingStatus(LeaveRequestType t) => t switch
+            {
+                LeaveRequestType.SICK => WorkingStatus.SICK,
+                LeaveRequestType.LEAVE => WorkingStatus.ON_LEAVE,
+                LeaveRequestType.DL => WorkingStatus.OFFICIAL_TRAVEL,
+                _ => WorkingStatus.ON_LEAVE
+            };
+
+            var mappedStatus = MapLeaveTypeToWorkingStatus(leave.Type);
+
+            foreach (var date in workingDates)
+            {
+                var attendance = await _context.Attendance
+                    .FirstOrDefaultAsync(a => a.UserId == leave.UserId && a.Date == date);
+
+                if (attendance == null)
+                {
+                    attendance = new Attendance
+                    {
+                        Guid = Guid.NewGuid(),
+                        UserId = leave.UserId,
+                        DepartmentId = leave.DepartmentId,
+                        Date = date,
+                        Status = mappedStatus,
+                        CheckInTime = null,
+                        CheckOutTime = null,
+                        WorkHours = 0m,
+                        LateMinutes = null
+                    };
+
+                    _context.Attendance.Add(attendance);
+
+                    var orphanViolations = await _context.AttendanceViolation
+                        .Where(v => v.AttendanceId == attendance.Guid)
+                        .ToListAsync();
+
+                    if (orphanViolations.Any())
+                        _context.AttendanceViolation.RemoveRange(orphanViolations);
+                }
+                else
+                {
+                    var existingViolations = await _context.AttendanceViolation
+                        .Where(v => v.AttendanceId == attendance.Guid)
+                        .ToListAsync();
+
+                    if (existingViolations.Any())
+                        _context.AttendanceViolation.RemoveRange(existingViolations);
+
+                    attendance.Status = mappedStatus;
+                    attendance.WorkHours = 0m;
+                    attendance.LateMinutes = null;
+                    attendance.CheckInNotes = null;
+                    attendance.CheckOutNotes = null;
+                    attendance.CheckInPhotoId = null;
+                    attendance.CheckOutPhotoId = null;
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return leave;
     }
 }
