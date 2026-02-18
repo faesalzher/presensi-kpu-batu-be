@@ -28,6 +28,14 @@ public class AttendanceController : ControllerBase
         //_filesService = filesService;
     }
 
+    // GET /attendance
+    [HttpGet]
+    public async Task<IActionResult> GetAllAttendance([FromQuery] AttendanceReportQueryParams query)
+    {
+        var result = await _attendanceService.GetAllAttendanceAsync(query);
+        return Ok(result);
+    }
+
     // =========================
     // CHECK IN
     // POST /attendance/check-in

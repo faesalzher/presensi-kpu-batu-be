@@ -7,6 +7,7 @@ using presensi_kpu_batu_be.Modules.AttendanceModule.Dto;
 using presensi_kpu_batu_be.Modules.SystemSettingModule.GeneralSetting;
 using presensi_kpu_batu_be.Modules.UserModule;
 using presensi_kpu_batu_be.Modules.TunjanganModule;
+using presensi_kpu_batu_be.Modules.StatisticModule.Dto;
 using System.Globalization;
 
 namespace presensi_kpu_batu_be.Modules.AttendanceModule
@@ -81,6 +82,158 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     LateMinutes = a.LateMinutes
                 })
                 .FirstOrDefaultAsync();
+        }
+
+        public async Task<List<AttendanceReportItemResponse>> GetAllAttendanceAsync(AttendanceReportQueryParams query)
+        {
+            if (query == null)
+                throw new BadRequestException("Invalid query");
+
+            if (string.IsNullOrWhiteSpace(query.StartDate) || string.IsNullOrWhiteSpace(query.EndDate))
+                throw new BadRequestException("startDate dan endDate wajib diisi");
+
+            var start = DateOnly.Parse(query.StartDate);
+            var end = DateOnly.Parse(query.EndDate);
+
+            if (end < start)
+                throw new BadRequestException("endDate tidak boleh lebih kecil dari startDate");
+
+            var scope = query.Scope ?? BulkReportScope.ALL_USERS;
+
+            List<User> users;
+
+            if (scope == BulkReportScope.ALL_USERS)
+            {
+                users = await _context.Users
+                    .AsNoTracking()
+                    .Where(u => u.IsActive)
+                    .OrderBy(u => u.Duk == null)
+                    .ThenBy(u => u.Duk)
+                    .ThenBy(u => u.FullName)
+                    .ToListAsync();
+            }
+            else if (scope == BulkReportScope.DEPARTMENT)
+            {
+                if (string.IsNullOrWhiteSpace(query.DepartmentName))
+                    throw new BadRequestException("departmentName wajib diisi untuk scope DEPARTMENT");
+
+                var deptUsers = await _userService.GetUsersByDepartmentNameAsync(query.DepartmentName);
+                var deptUserIds = deptUsers.Select(x => x.Guid).ToList();
+
+                users = await _context.Users
+                    .AsNoTracking()
+                    .Where(u => u.IsActive && deptUserIds.Contains(u.Guid))
+                    .OrderBy(u => u.Duk == null)
+                    .ThenBy(u => u.Duk)
+                    .ThenBy(u => u.FullName)
+                    .ToListAsync();
+            }
+            else
+            {
+                throw new BadRequestException("scope tidak didukung untuk endpoint ini");
+            }
+
+            if (query.UserId.HasValue)
+                users = users.Where(u => u.Guid == query.UserId.Value).ToList();
+
+            var userIds = users.Select(u => u.Guid).ToList();
+            if (userIds.Count == 0)
+                return new List<AttendanceReportItemResponse>();
+
+            WorkingStatus? statusFilter = null;
+            if (!string.IsNullOrWhiteSpace(query.Status) &&
+                Enum.TryParse<WorkingStatus>(query.Status.Trim(), ignoreCase: true, out var parsed))
+            {
+                statusFilter = parsed;
+            }
+
+            var attendances = await _context.Attendance
+                .AsNoTracking()
+                .Where(a => a.Date >= start && a.Date <= end && userIds.Contains(a.UserId))
+                .Select(a => new
+                {
+                    a.UserId,
+                    a.Date,
+                    a.CheckInTime,
+                    a.CheckOutTime,
+                    Status = a.Status.ToString()
+                })
+                .ToListAsync();
+
+            if (attendances.Count == 0)
+                return null;
+
+            var attendanceMap = attendances
+                .GroupBy(x => (x.UserId, x.Date))
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var results = new List<AttendanceReportItemResponse>();
+
+            for (var d = start; d <= end; d = d.AddDays(1))
+            {
+                foreach (var u in users)
+                {
+                    var key = (u.Guid, d);
+                    if (!attendanceMap.TryGetValue(key, out var rec))
+                    {
+                        if (statusFilter != null && statusFilter != WorkingStatus.ABSENT)
+                            continue;
+
+                        results.Add(new AttendanceReportItemResponse
+                        {
+                            UserId = u.Guid,
+                            Name = u.FullName ?? string.Empty,
+                            Nip = u.Nip,
+                            ProfileImageUrl = u.ProfileImageUrl,
+                            Date = d,
+                            CheckInTime = null,
+                            CheckOutTime = null,
+                            Status = string.Empty
+                        });
+
+                        continue;
+                    }
+
+                    if (statusFilter != null &&
+                        !string.Equals(rec.Status, statusFilter.Value.ToString(), StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    results.Add(new AttendanceReportItemResponse
+                    {
+                        UserId = u.Guid,
+                        Name = u.FullName ?? string.Empty,
+                        Nip = u.Nip,
+                        ProfileImageUrl = u.ProfileImageUrl,
+                        Date = d,
+                        CheckInTime = rec.CheckInTime,
+                        CheckOutTime = rec.CheckOutTime,
+                        Status = MapStatusLabel(rec.Status)
+                    });
+                }
+            }
+
+            // Maintain user ordering by DUK within each date
+            var dukMap = users.ToDictionary(u => u.Guid, u => u.Duk);
+            return results
+                .OrderBy(x => x.Date)
+                .ThenBy(x => dukMap.TryGetValue(x.UserId, out var duk) && duk.HasValue ? 0 : 1)
+                .ThenBy(x => dukMap.TryGetValue(x.UserId, out var duk) ? duk : null)
+                .ThenBy(x => x.Name)
+                .ToList();
+        }
+
+        private static string MapStatusLabel(string? status)
+        {
+            return status?.Trim().ToUpperInvariant() switch
+            {
+                nameof(WorkingStatus.PRESENT) => "Hadir",
+                nameof(WorkingStatus.OFFICIAL_TRAVEL) => "Dinas Luar",
+                nameof(WorkingStatus.SICK) => "Sakit",
+                nameof(WorkingStatus.PROBLEM) => "Masalah Presensi",
+                nameof(WorkingStatus.ON_LEAVE) => "Cuti",
+                nameof(WorkingStatus.ABSENT) => "Absen",
+                _ => status ?? string.Empty
+            };
         }
 
         public async Task<AttendanceResponse> CheckIn(Guid userId, CheckInDto dto)
