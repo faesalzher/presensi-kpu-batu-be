@@ -228,6 +228,9 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             else
             {
                 await CreateConsolidatedSheetAsync(workbook, bulkData, startDate, endDate, reportTitle);
+
+                if (dto.Period == ReportPeriod.MONTHLY)
+                    await CreateDailyConsolidatedSheetAsync(workbook, targets, startDate, endDate);
             }
 
             var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "reports");
@@ -578,7 +581,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Columns().AdjustToContents();
         }
 
-        private Task CreateConsolidatedSheetAsync(
+        private async Task CreateConsolidatedSheetAsync(
             XLWorkbook workbook,
             List<(User user, StatisticSummary statistic)> bulkData,
             DateOnly startDate,
@@ -596,6 +599,23 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Cell(2, 1).Value = $"Periode: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
             ws.Range(2, 1, 2, 11).Merge();
             ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // holidays reference: same source as TimeProviderService (GeneralSetting: HOLIDAYS)
+            var holidaysRaw = await _context.GeneralSetting
+                .AsNoTracking()
+                .Where(x => x.Code == "HOLIDAYS")
+                .Select(x => x.Value)
+                .FirstOrDefaultAsync();
+
+            var holidaySet = new HashSet<DateOnly>();
+            if (!string.IsNullOrWhiteSpace(holidaysRaw))
+            {
+                foreach (var part in holidaysRaw.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (DateOnly.TryParse(part.Trim(), out var h))
+                        holidaySet.Add(h);
+                }
+            }
 
             var row = 4;
 
@@ -635,7 +655,261 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             }
 
             ws.Columns().AdjustToContents();
-            return Task.CompletedTask;
+            await Task.CompletedTask;
+        }
+
+        private async Task CreateDailyConsolidatedSheetAsync(
+            XLWorkbook workbook,
+            List<User> users,
+            DateOnly startDate,
+            DateOnly endDate)
+        {
+            var tz = await GetTimeZoneAsync();
+            var ws = workbook.Worksheets.Add("Laporan Gabungan Per Hari");
+
+            // Print setup
+            ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
+            ws.PageSetup.FitToPages(1, 1);
+            ws.PageSetup.SetRowsToRepeatAtTop(1, 2);
+
+            // Load signature users
+            var sekretarisGuid = Guid.Parse("fb11a59d-0454-434c-9d88-3182a22cae53");
+            var pengelolaGuid = Guid.Parse("113ec700-0bdb-43dd-870b-8cc4eb07c495");
+
+            var signUsers = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Guid == sekretarisGuid || u.Guid == pengelolaGuid)
+                .Select(u => new { u.Guid, u.FullName, u.Nip })
+                .ToListAsync();
+
+            var sekretaris = signUsers.FirstOrDefault(x => x.Guid == sekretarisGuid);
+            var pengelola = signUsers.FirstOrDefault(x => x.Guid == pengelolaGuid);
+
+            // Column formatting
+            ws.Column(1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center; // NO
+            ws.Columns(3, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center; // PUKUL columns
+
+            // holidays reference: same source as TimeProviderService (GeneralSetting: HOLIDAYS)
+            var holidaysRaw = await _context.GeneralSetting
+                .AsNoTracking()
+                .Where(x => x.Code == "HOLIDAYS")
+                .Select(x => x.Value)
+                .FirstOrDefaultAsync();
+
+            var holidaySet = new HashSet<DateOnly>();
+            if (!string.IsNullOrWhiteSpace(holidaysRaw))
+            {
+                foreach (var part in holidaysRaw.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (DateOnly.TryParse(part.Trim(), out var h))
+                        holidaySet.Add(h);
+                }
+            }
+
+            var userIds = users.Select(u => u.Guid).ToList();
+            var allAttendance = await _context.Attendance
+                .AsNoTracking()
+                .Where(a => a.Date >= startDate && a.Date <= endDate && userIds.Contains(a.UserId))
+                .Select(a => new { a.UserId, a.Date, a.CheckInTime, a.CheckOutTime, Status = a.Status.ToString() })
+                .ToListAsync();
+
+            var attMap = allAttendance
+                .GroupBy(x => (x.UserId, x.Date))
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var row = 4;
+
+            for (var d = startDate; d <= endDate; d = d.AddDays(1))
+            {
+                var dt = d.ToDateTime(TimeOnly.MinValue);
+
+                // Skip Saturday/Sunday + configured holidays
+                if (dt.DayOfWeek == DayOfWeek.Saturday || dt.DayOfWeek == DayOfWeek.Sunday)
+                    continue;
+                if (holidaySet.Contains(d))
+                    continue;
+
+                var pageStartRow = row;
+
+                // Title per day (merged only up to column J)
+                ws.Cell(row, 1).Value = "ABSENSI HARIAN PEGAWAI";
+                ws.Range(row, 1, row, 10).Merge();
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                row++;
+
+                ws.Cell(row, 1).Value = "ASN KOMISI PEMILIHAN UMUM KOTA BATU";
+                ws.Range(row, 1, row, 10).Merge();
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                row += 2;
+
+                ws.Cell(row, 1).Value = "HARI";
+                ws.Cell(row, 2).Value = ":";
+                ws.Cell(row, 3).Value = dt.ToString("dddd", new CultureInfo("id-ID")).ToUpperInvariant();
+                ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Range(row, 2, row, 10).Merge();
+                ws.Cell(row, 2).Value = $": {dt.ToString("dddd", new CultureInfo("id-ID")).ToUpperInvariant()}";
+                row++;
+
+                ws.Cell(row, 1).Value = "TANGGAL";
+                ws.Cell(row, 2).Value = ":";
+                ws.Cell(row, 3).Value = dt.ToString("d MMMM yyyy", new CultureInfo("id-ID"));
+                ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Range(row, 2, row, 10).Merge();
+                ws.Cell(row, 2).Value = $": {dt.ToString("d MMMM yyyy", new CultureInfo("id-ID"))}";
+                row += 2;
+
+                // Header (template-like)
+                // Columns: NO | NAMA | DATANG PUKUL | PARAF | PULANG PUKUL | PARAF | KETERANGAN: C | S | DL | TK
+                ws.Cell(row, 1).Value = "NO";
+                ws.Range(row, 1, row + 1, 1).Merge();
+
+                ws.Cell(row, 2).Value = "NAMA";
+                ws.Range(row, 2, row + 1, 2).Merge();
+
+                ws.Cell(row, 3).Value = "DATANG";
+                ws.Range(row, 3, row, 4).Merge();
+                ws.Cell(row + 1, 3).Value = "PUKUL";
+                ws.Cell(row + 1, 4).Value = "PARAF";
+
+                ws.Cell(row, 5).Value = "PULANG";
+                ws.Range(row, 5, row, 6).Merge();
+                ws.Cell(row + 1, 5).Value = "PUKUL";
+                ws.Cell(row + 1, 6).Value = "PARAF";
+
+                ws.Cell(row, 7).Value = "KETERANGAN";
+                ws.Range(row, 7, row, 10).Merge();
+                ws.Cell(row + 1, 7).Value = "C";
+                ws.Cell(row + 1, 8).Value = "S";
+                ws.Cell(row + 1, 9).Value = "DL";
+                ws.Cell(row + 1, 10).Value = "TK";
+
+                var headerRange = ws.Range(row, 1, row + 1, 10);
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                headerRange.Style.Fill.BackgroundColor = XLColor.FromArgb(0xF2, 0xF2, 0xF2);
+                headerRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                headerRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+                row += 2;
+
+                var no = 1;
+                foreach (var u in users)
+                {
+                    attMap.TryGetValue((u.Guid, d), out var rec);
+
+                    ws.Cell(row, 1).Value = no++;
+                    ws.Cell(row, 2).Value = (u.FullName ?? string.Empty) + (string.IsNullOrWhiteSpace(u.Nip) ? "" : $"\nNIP. {u.Nip}");
+                    ws.Cell(row, 2).Style.Alignment.WrapText = true;
+
+                    var inTime = rec?.CheckInTime;
+                    var outTime = rec?.CheckOutTime;
+
+                    ws.Cell(row, 3).Value = FormatTimeHm(inTime, tz);
+                    ws.Cell(row, 4).Value = string.Empty; // PARAF
+                    ws.Cell(row, 5).Value = FormatTimeHm(outTime, tz);
+                    ws.Cell(row, 6).Value = string.Empty; // PARAF
+
+                    var status = rec?.Status;
+                    ws.Cell(row, 7).Value = string.Equals(status, nameof(WorkingStatus.ON_LEAVE), StringComparison.OrdinalIgnoreCase) ? "v" : "";
+                    ws.Cell(row, 8).Value = string.Equals(status, nameof(WorkingStatus.SICK), StringComparison.OrdinalIgnoreCase) ? "v" : "";
+                    ws.Cell(row, 9).Value = string.Equals(status, nameof(WorkingStatus.OFFICIAL_TRAVEL), StringComparison.OrdinalIgnoreCase) ? "v" : "";
+                    ws.Cell(row, 10).Value = string.IsNullOrWhiteSpace(status) || string.Equals(status, nameof(WorkingStatus.ABSENT), StringComparison.OrdinalIgnoreCase) ? "v" : "";
+
+                    // make checkmarks bold + centered
+                    ws.Range(row, 7, row, 10).Style.Font.Bold = true;
+                    ws.Range(row, 7, row, 10).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                    var dataRange = ws.Range(row, 1, row, 10);
+                    dataRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    dataRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+                    dataRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                    row++;
+                }
+
+                // signature blocks (template-like)
+                row += 2;
+                ws.Cell(row, 2).Value = "MENGETAHUI";
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 2, row, 5).Merge();
+
+                ws.Cell(row, 8).Value = "(Pengelola Buku Kendali)";
+                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 8, row, 10).Merge();
+
+                row++;
+                ws.Cell(row, 2).Value = "SEKRETARIS KOMISI PEMILIHAN UMUM";
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 2, row, 5).Merge();
+
+                row++;
+                ws.Cell(row, 2).Value = "KOTA BATU";
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 2, row, 5).Merge();
+
+                row += 4;
+                ws.Cell(row, 2).Value = sekretaris?.FullName ?? "";
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 2, row, 5).Merge();
+                ws.Cell(row, 8).Value = pengelola?.FullName ?? "";
+                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 8, row, 10).Merge();
+
+                row++;
+                ws.Cell(row, 2).Value = string.IsNullOrWhiteSpace(sekretaris?.Nip) ? "NIP." : $"NIP. {sekretaris.Nip}";
+                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 2, row, 5).Merge();
+                ws.Cell(row, 8).Value = string.IsNullOrWhiteSpace(pengelola?.Nip) ? "NIP." : $"NIP. {pengelola.Nip}";
+                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(row, 8, row, 10).Merge();
+
+                row += 2;
+
+                // Legend / Keterangan (template-like)
+                ws.Cell(row, 1).Value = "Keterangan:";
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                row++;
+
+                ws.Cell(row, 2).Value = "S";
+                ws.Cell(row, 3).Value = ":";
+                ws.Cell(row, 4).Value = "SAKIT";
+                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                row++;
+                ws.Cell(row, 2).Value = "DL";
+                ws.Cell(row, 3).Value = ":";
+                ws.Cell(row, 4).Value = "DINAS LUAR";
+                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                row++;
+                ws.Cell(row, 2).Value = "C";
+                ws.Cell(row, 3).Value = ":";
+                ws.Cell(row, 4).Value = "CUTI";
+                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                row++;
+                ws.Cell(row, 2).Value = "TK";
+                ws.Cell(row, 3).Value = ":";
+                ws.Cell(row, 4).Value = "TANPA KETERANGAN";
+                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+
+                row += 3;
+
+                var pageEndRow = row - 1;
+                ws.PageSetup.AddHorizontalPageBreak(pageEndRow);
+
+                // keep print area growing with content
+                ws.PageSetup.PrintAreas.Add(ws.Range(pageStartRow, 1, pageEndRow, 10).RangeAddress.ToStringRelative());
+            }
+
+            ws.Column(1).Width = 5;
+            ws.Column(2).Width = 35;
+            ws.Columns(3, 6).Width = 10;
+            ws.Columns(7, 10).Width = 6;
+            ws.Columns().Style.Font.FontName = "Calibri";
         }
 
         private StatisticSummary ProcessStatistic(
