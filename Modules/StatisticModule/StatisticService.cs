@@ -617,7 +617,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 }
             }
 
-            var row = 4;
+            var row = 1;
 
             foreach (var (user, stat) in bulkData)
             {
@@ -665,12 +665,48 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             DateOnly endDate)
         {
             var tz = await GetTimeZoneAsync();
-            var ws = workbook.Worksheets.Add("Laporan Gabungan Per Hari");
+
+            static List<User> ExcludeByGuid(List<User> src, Guid excludeGuid)
+                => src.Where(u => u.Guid != excludeGuid).ToList();
+
+            static List<User> IncludeOnlyGuid(List<User> src, Guid includeGuid)
+                => src.Where(u => u.Guid == includeGuid).ToList();
+
+            var ppnpnGuid = Guid.Parse("2daa5b6e-b4a1-4c79-9175-b8e59964289f");
+
+            var asnUsers = ExcludeByGuid(users, ppnpnGuid);
+            var ppnpnUsers = IncludeOnlyGuid(users, ppnpnGuid);
+
+            if (asnUsers.Count > 0)
+                await CreateDailyConsolidatedSheetInternalAsync(workbook, asnUsers, startDate, endDate, "Laporan Gabungan Per Hari ASN", tz);
+
+            if (ppnpnUsers.Count > 0)
+                await CreateDailyConsolidatedSheetInternalAsync(workbook, ppnpnUsers, startDate, endDate, "Laporan Gabungan Per Hari PPNPN", tz);
+
+            return;
+        }
+
+        private async Task CreateDailyConsolidatedSheetInternalAsync(
+            XLWorkbook workbook,
+            List<User> users,
+            DateOnly startDate,
+            DateOnly endDate,
+            string sheetName,
+            TimeZoneInfo tz)
+        {
+            var ws = workbook.Worksheets.Add(sheetName);
+
+            var isPpnpnSheet = string.Equals(sheetName, "Laporan Gabungan Per Hari PPNPN", StringComparison.OrdinalIgnoreCase);
 
             // Print setup
             ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
             ws.PageSetup.FitToPages(1, 1);
             ws.PageSetup.SetRowsToRepeatAtTop(1, 2);
+            ws.PageSetup.Margins.Top = 0;
+            ws.PageSetup.Margins.Bottom = 0.25;
+
+            // Default font
+            ws.Style.Font.FontSize = 14;
 
             // Load signature users
             var sekretarisGuid = Guid.Parse("fb11a59d-0454-434c-9d88-3182a22cae53");
@@ -688,6 +724,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             // Column formatting
             ws.Column(1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center; // NO
             ws.Columns(3, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center; // PUKUL columns
+            ws.Column(2).Style.Alignment.WrapText = true;
+            ws.Columns(8, 10).Style.Alignment.WrapText = true;
 
             // holidays reference: same source as TimeProviderService (GeneralSetting: HOLIDAYS)
             var holidaysRaw = await _context.GeneralSetting
@@ -738,30 +776,26 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 row++;
 
-                ws.Cell(row, 1).Value = "ASN KOMISI PEMILIHAN UMUM KOTA BATU";
+                ws.Cell(row, 1).Value = isPpnpnSheet
+                    ? "PPNPN KOMISI PEMILIHAN UMUM KOTA BATU"
+                    : "ASN KOMISI PEMILIHAN UMUM KOTA BATU";
                 ws.Range(row, 1, row, 10).Merge();
                 ws.Cell(row, 1).Style.Font.Bold = true;
                 ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 row += 2;
 
-                ws.Cell(row, 1).Value = "HARI";
-                ws.Cell(row, 2).Value = ":";
-                ws.Cell(row, 3).Value = dt.ToString("dddd", new CultureInfo("id-ID")).ToUpperInvariant();
+                ws.Cell(row, 1).Value = $"HARI          :  {dt.ToString("dddd", new CultureInfo("id-ID")).ToUpperInvariant()}";
                 ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-                ws.Range(row, 2, row, 10).Merge();
-                ws.Cell(row, 2).Value = $": {dt.ToString("dddd", new CultureInfo("id-ID")).ToUpperInvariant()}";
+                ws.Range(row, 1, row, 3).Merge();
                 row++;
 
-                ws.Cell(row, 1).Value = "TANGGAL";
-                ws.Cell(row, 2).Value = ":";
-                ws.Cell(row, 3).Value = dt.ToString("d MMMM yyyy", new CultureInfo("id-ID"));
+                ws.Cell(row, 1).Value = $"TANGGAL  : {dt.ToString("d MMMM yyyy", new CultureInfo("id-ID"))}";
                 ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-                ws.Range(row, 2, row, 10).Merge();
-                ws.Cell(row, 2).Value = $": {dt.ToString("d MMMM yyyy", new CultureInfo("id-ID"))}";
+                ws.Range(row, 1, row, 3).Merge();
                 row += 2;
 
                 // Header (template-like)
@@ -805,7 +839,14 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     attMap.TryGetValue((u.Guid, d), out var rec);
 
                     ws.Cell(row, 1).Value = no++;
-                    ws.Cell(row, 2).Value = (u.FullName ?? string.Empty) + (string.IsNullOrWhiteSpace(u.Nip) ? "" : $"\nNIP. {u.Nip}");
+                    if (!isPpnpnSheet)
+                    {
+                        ws.Cell(row, 2).Value = (u.FullName ?? string.Empty) + (string.IsNullOrWhiteSpace(u.Nip) ? "" : $"\nNIP. {u.Nip}");
+                    }
+                    else
+                    {
+                        ws.Cell(row, 2).Value = (u.FullName ?? string.Empty);
+                    }
                     ws.Cell(row, 2).Style.Alignment.WrapText = true;
 
                     var inTime = rec?.CheckInTime;
@@ -835,66 +876,88 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
                 // signature blocks (template-like)
                 row += 2;
-                ws.Cell(row, 2).Value = "MENGETAHUI";
-                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 2, row, 5).Merge();
+               
+                    ws.Cell(row, 1).Value = "MENGETAHUI";
+                    ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 1, row, 2).Merge();
 
-                ws.Cell(row, 8).Value = "(Pengelola Buku Kendali)";
-                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 8, row, 10).Merge();
+                if (!isPpnpnSheet)
+                {
+                    ws.Cell(row, 5).Value = "(Pengelola Buku Kendali)";
+                    ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 5, row, 10).Merge();
+
+                    row++;
+                }
+
+
+          
+                    ws.Cell(row, 1).Value = "SEKRETARIS KOMISI PEMILIHAN UMUM";
+                    ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 1, row, 2).Merge();
+
+                    row++;
+                    ws.Cell(row, 1).Value = "KOTA BATU";
+                    ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 1, row, 2).Merge();
+
+                    row += 6;
+                    ws.Cell(row, 1).Value = sekretaris?.FullName ?? "";
+                    ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 1, row, 2).Merge();
+
+                if (!isPpnpnSheet)
+                {
+                    ws.Cell(row, 5).Value = pengelola?.FullName ?? "";
+                    ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Cell(row, 5).Style.Alignment.WrapText = true;
+                    ws.Range(row, 5, row, 10).Merge();
+                }
 
                 row++;
-                ws.Cell(row, 2).Value = "SEKRETARIS KOMISI PEMILIHAN UMUM";
-                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 2, row, 5).Merge();
+               
+                    ws.Cell(row, 1).Value = string.IsNullOrWhiteSpace(sekretaris?.Nip) ? "NIP." : $"NIP. {sekretaris.Nip}";
+                    ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Range(row, 1, row, 2).Merge();
 
-                row++;
-                ws.Cell(row, 2).Value = "KOTA BATU";
-                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 2, row, 5).Merge();
+                if (!isPpnpnSheet)
+                {
+                    ws.Cell(row, 5).Value = string.IsNullOrWhiteSpace(pengelola?.Nip) ? "NIP." : $"NIP. {pengelola.Nip}";
+                    ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Cell(row, 5).Style.Alignment.WrapText = true;
+                    ws.Range(row, 5, row, 10).Merge();
+                }
 
-                row += 4;
-                ws.Cell(row, 2).Value = sekretaris?.FullName ?? "";
-                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 2, row, 5).Merge();
-                ws.Cell(row, 8).Value = pengelola?.FullName ?? "";
-                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 8, row, 10).Merge();
 
-                row++;
-                ws.Cell(row, 2).Value = string.IsNullOrWhiteSpace(sekretaris?.Nip) ? "NIP." : $"NIP. {sekretaris.Nip}";
-                ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 2, row, 5).Merge();
-                ws.Cell(row, 8).Value = string.IsNullOrWhiteSpace(pengelola?.Nip) ? "NIP." : $"NIP. {pengelola.Nip}";
-                ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(row, 8, row, 10).Merge();
+                // Ensure signature rows have enough height (avoid text cutoff)
+                ws.Row(row - 1).AdjustToContents();
+                ws.Row(row).AdjustToContents();
 
                 row += 2;
 
                 // Legend / Keterangan (template-like)
-                ws.Cell(row, 1).Value = "Keterangan:";
+                ws.Cell(row, 1).Value = "Keterangan";
                 ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Range(row, 1, row, 2).Merge();
+                ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 row++;
 
-                ws.Cell(row, 2).Value = "S";
-                ws.Cell(row, 3).Value = ":";
-                ws.Cell(row, 4).Value = "SAKIT";
-                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                // Two-column legend like the template:
+                // Left: S, DL | Right: C, TK
+                ws.Cell(row, 1).Value = "S";
+                ws.Cell(row, 2).Value = ": SAKIT";
+                ws.Cell(row, 4).Value = "";
+                ws.Cell(row, 5).Value = "C";
+                ws.Cell(row, 6).Value = ": CUTI";
+                ws.Range(row, 1, row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 row++;
-                ws.Cell(row, 2).Value = "DL";
-                ws.Cell(row, 3).Value = ":";
-                ws.Cell(row, 4).Value = "DINAS LUAR";
-                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-                row++;
-                ws.Cell(row, 2).Value = "C";
-                ws.Cell(row, 3).Value = ":";
-                ws.Cell(row, 4).Value = "CUTI";
-                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-                row++;
-                ws.Cell(row, 2).Value = "TK";
-                ws.Cell(row, 3).Value = ":";
-                ws.Cell(row, 4).Value = "TANPA KETERANGAN";
-                ws.Range(row, 2, row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+
+                ws.Cell(row, 1).Value = "DL";
+                ws.Cell(row, 2).Value = ": DINAS LUAR";
+                ws.Cell(row, 4).Value = "";
+                ws.Cell(row, 5).Value = "TK";
+                ws.Cell(row, 6).Value = ": TANPA KETERANGAN";
+                ws.Range(row, 1, row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
                 row += 3;
 
@@ -906,9 +969,13 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             }
 
             ws.Column(1).Width = 5;
-            ws.Column(2).Width = 35;
-            ws.Columns(3, 6).Width = 10;
-            ws.Columns(7, 10).Width = 6;
+            ws.Column(2).Width = 40;
+            ws.Columns(3,4).Width = 10;
+            ws.Columns(5,6).Width = 10;
+
+            // Make indicator columns tight like the template
+            ws.Columns(7, 10).Width = 3;
+            // Widen the right-side area so signature + legend text doesn't get cut
             ws.Columns().Style.Font.FontName = "Calibri";
         }
 
