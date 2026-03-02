@@ -1040,19 +1040,33 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            if (period == ReportPeriod.MONTHLY)
+            static DateOnly ParseDateOnly(string value)
             {
-                var start = new DateOnly(today.Year, today.Month, 1);
-                var end = start.AddMonths(1).AddDays(-1);
-                return (start, end);
+                if (DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var exact))
+                    return exact;
+
+                return DateOnly.Parse(value, CultureInfo.InvariantCulture);
             }
 
-            if (!string.IsNullOrEmpty(startDate) && !string.IsNullOrEmpty(endDate))
+            // If explicit dates are provided, always honor them (including MONTHLY).
+            if (!string.IsNullOrWhiteSpace(startDate) && !string.IsNullOrWhiteSpace(endDate))
             {
-                return (
-                    DateOnly.Parse(startDate),
-                    DateOnly.Parse(endDate)
-                );
+                var startParsed = ParseDateOnly(startDate.Trim());
+                var endParsed = ParseDateOnly(endDate.Trim());
+
+                if (endParsed < startParsed)
+                    throw new ArgumentException("Invalid date range");
+
+                return (startParsed, endParsed);
+            }
+
+            if (period == ReportPeriod.MONTHLY)
+            {
+                // Default: previous month (common expectation for "bulan lalu")
+                var firstDayOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+                var prevMonthStart = firstDayOfThisMonth.AddMonths(-1);
+                var prevMonthEnd = firstDayOfThisMonth.AddDays(-1);
+                return (prevMonthStart, prevMonthEnd);
             }
 
             throw new ArgumentException("Invalid date range");
