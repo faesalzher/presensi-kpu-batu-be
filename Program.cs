@@ -202,6 +202,7 @@ builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<ITunjanganService, TunjanganService>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<presensi_kpu_batu_be.Modules.RevisionModule.IRevisionService, presensi_kpu_batu_be.Modules.RevisionModule.RevisionService>();
 builder.Services.AddScoped<PushSenderService>();
 
 var app = builder.Build();

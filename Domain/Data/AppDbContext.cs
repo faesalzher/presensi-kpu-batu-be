@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<LeaveRequest> LeaveRequest { get; set; }
     public DbSet<GeneralSetting> GeneralSetting { get; set; }
     public DbSet<AttendanceViolation> AttendanceViolation { get; set; }
+    public DbSet<AttendanceRevision> AttendanceRevision { get; set; }
     public DbSet<FileMetadata> FileMetadata { get; set; }
     public DbSet<RefTunjanganKinerja> RefTunjanganKinerja { get; set; }
     public DbSet<SchedulerLog> SchedulerLogs { get; set; }
@@ -39,6 +40,14 @@ public class AppDbContext : DbContext
 
             builder.HasOne(x => x.Attendance)
                    .WithMany(a => a.Violation)
+                   .HasForeignKey(x => x.AttendanceId)
+                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AttendanceRevision>(builder =>
+        {
+            builder.HasOne(x => x.Attendance)
+                   .WithMany(a => a.Revision)
                    .HasForeignKey(x => x.AttendanceId)
                    .OnDelete(DeleteBehavior.Cascade);
         });

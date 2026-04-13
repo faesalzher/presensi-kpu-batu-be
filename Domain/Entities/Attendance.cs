@@ -69,5 +69,9 @@ namespace presensi_kpu_batu_be.Domain.Entities
         [InverseProperty(nameof(AttendanceViolation.Attendance))]
         public ICollection<AttendanceViolation> Violation { get; set; }
             = new List<AttendanceViolation>();
+
+        [InverseProperty(nameof(AttendanceRevision.Attendance))]
+        public ICollection<AttendanceRevision> Revision { get; set; }
+            = new List<AttendanceRevision>();
     }
 }

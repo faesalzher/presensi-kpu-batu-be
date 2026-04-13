@@ -6,6 +6,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule.Dto
     {
         public int TotalDays { get; set; }
 
+        public int Revision { get; set; }
+
         public int Present { get; set; }
         public int Absent { get; set; }
         public int Problem { get; set; }          // late + early + incomplete

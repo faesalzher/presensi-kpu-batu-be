@@ -11,10 +11,12 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
     public class StatisticService : IStatisticService
     {
         private readonly AppDbContext _context;
+        private readonly ITimeProviderService _timeProviderService;
 
-        public StatisticService(AppDbContext context)
+        public StatisticService(AppDbContext context, ITimeProviderService timeProviderService)
         {
             _context = context;
+            _timeProviderService = timeProviderService;
         }
 
         private static string MapStatusLabel(string? status)
@@ -93,7 +95,31 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 })
                 .ToListAsync();
 
-            return ProcessStatistic(records, startDate, endDate);
+            var summary = ProcessStatistic(records, startDate, endDate);
+
+            {
+                var revisionQ = _context.Attendance
+                    .AsNoTracking()
+                    .Where(a => a.Date >= startDate && a.Date <= endDate && a.Status == WorkingStatus.REVISION);
+
+                if (query.UserId.HasValue)
+                    revisionQ = revisionQ.Where(a => a.UserId == query.UserId.Value);
+
+                if (query.DepartmentId.HasValue)
+                    revisionQ = revisionQ.Where(a => a.DepartmentId == query.DepartmentId.Value);
+
+                summary.Revision = await revisionQ.CountAsync();
+            }
+
+            // Special rule: for current month statistics, TotalDays should be
+            // working days in the whole current month (1..last day) minus holidays/weekends.
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+                var monthStart = new DateOnly(today.Year, today.Month, 1);
+                var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+                summary.TotalDays = await CountWorkingDaysAsync(monthStart, monthEnd);
+
+            return summary;
         }
 
         public async Task<TukinSummary> GetMyTukinSummaryAsync(Guid userId, DateOnly startDate, DateOnly endDate)
@@ -1034,6 +1060,52 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     : 0;
 
             return summary;
+        }
+
+        private async Task<int> CountWorkingDaysAsync(DateOnly startDate, DateOnly endDate)
+        {
+            if (endDate < startDate)
+                return 0;
+
+            var totalDays = endDate.DayNumber - startDate.DayNumber + 1;
+
+            var fullWeeks = totalDays / 7;
+            var remainder = totalDays % 7;
+
+            // Weekday count without holidays
+            var working = fullWeeks * 5;
+
+            var startDow = startDate.DayOfWeek;
+            for (var i = 0; i < remainder; i++)
+            {
+                var dow = (DayOfWeek)(((int)startDow + i) % 7);
+                if (dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday)
+                    working++;
+            }
+
+            // subtract configured holidays that fall on weekdays within range
+            var holidaysRaw = await _context.GeneralSetting
+                .AsNoTracking()
+                .Where(x => x.Code == "HOLIDAYS")
+                .Select(x => x.Value)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(holidaysRaw))
+                return working;
+
+            var holidayCount = 0;
+            foreach (var part in holidaysRaw.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!DateOnly.TryParse(part.Trim(), out var h))
+                    continue;
+                if (h < startDate || h > endDate)
+                    continue;
+                if (h.DayOfWeek == DayOfWeek.Saturday || h.DayOfWeek == DayOfWeek.Sunday)
+                    continue;
+                holidayCount++;
+            }
+
+            return Math.Max(0, working - holidayCount);
         }
 
         private (DateOnly start, DateOnly end) GetDateRange(ReportPeriod? period, string? startDate, string? endDate)
