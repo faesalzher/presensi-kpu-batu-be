@@ -405,6 +405,50 @@ namespace presensi_kpu_batu_be.Modules.RevisionModule
 
                 if (violations.Count > 0)
                     _context.AttendanceViolation.RemoveRange(violations);
+
+                // If the check-in was late but the user compensated by staying late,
+                // remove LATE violation as well.
+                if (attendance.CheckOutTime.HasValue)
+                {
+                    var tzId = await _settingService.GetAsync(presensi_kpu_batu_be.Common.Constants.GeneralSettingCodes.TIMEZONE);
+                    TimeZoneInfo tz;
+                    try
+                    {
+                        tz = TimeZoneInfo.FindSystemTimeZoneById(tzId);
+                    }
+                    catch
+                    {
+                        tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+                    }
+
+                    var workingDayInfo = await _timeProviderService.GetTodayWorkingInfoAsync();
+                    var workEnd = TimeOnly.Parse(workingDayInfo.WorkEnd!);
+
+                    var checkOutLocal = TimeZoneInfo.ConvertTimeFromUtc(attendance.CheckOutTime.Value, tz);
+
+                    var workEndLocal = new DateTime(attendance.Date.Year, attendance.Date.Month, attendance.Date.Day, workEnd.Hour, workEnd.Minute, 0);
+
+                    var lateMinutes = attendance.LateMinutes ?? 0;
+                    var lateToleranceRaw = await _settingService.GetAsync(presensi_kpu_batu_be.Common.Constants.GeneralSettingCodes.LATE_TOLERANCE_MINUTES);
+                    var lateTolerance = int.TryParse(lateToleranceRaw, out var lt) ? lt : 60;
+
+                    if (lateMinutes > 0 && lateMinutes < lateTolerance)
+                    {
+                        var compensatedMinutes = checkOutLocal > workEndLocal
+                            ? (int)(checkOutLocal - workEndLocal).TotalMinutes
+                            : 0;
+
+                        if (compensatedMinutes >= lateMinutes)
+                        {
+                            var lateViolation = await _context.AttendanceViolation
+                                .Where(v => v.AttendanceId == attendance.Guid && v.Type == AttendanceViolationType.LATE)
+                                .ToListAsync();
+
+                            if (lateViolation.Count > 0)
+                                _context.AttendanceViolation.RemoveRange(lateViolation);
+                        }
+                    }
+                }
             }
             else if (type is "LATE_ARRIVAL")
             {
