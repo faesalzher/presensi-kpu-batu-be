@@ -653,15 +653,15 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             var newAttendances = new List<Attendance>();
             var newViolations = new List<AttendanceViolation>();
 
-            foreach (var user in users)
+            foreach (var userId in userIds)
             {
-                if (attendanceByUserId.ContainsKey(user.Guid))
+                if (attendanceByUserId.ContainsKey(userId))
                     continue;
 
                 var attendance = new Attendance
                 {
                     Guid = Guid.NewGuid(),
-                    UserId = user.Guid,
+                    UserId = userId,
                     Date = today,
                     Status = WorkingStatus.PROBLEM,
                     CheckInTime = null,
@@ -671,7 +671,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 newAttendances.Add(attendance);
 
                 const decimal penaltyPercent = 2.5m;
-                var tukinBase = await GetTukinBaseAmountForUserAsync(user.Guid);
+                var tukinBase = await GetTukinBaseAmountForUserAsync(userId);
                 var penaltyAmount = Math.Round((tukinBase * penaltyPercent / 100m) * 0.5m, 2);
 
                 newViolations.Add(new AttendanceViolation
@@ -689,7 +689,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
                 response.AttendanceCreated++;
                 response.ViolationsAdded++;
-                response.AffectedUserIds.Add(user.Guid);
+                response.AffectedUserIds.Add(userId);
             }
 
             if (newAttendances.Any())
