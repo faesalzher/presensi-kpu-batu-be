@@ -27,8 +27,8 @@ public class PushTestController : ControllerBase
 
         var messageId = await _sender.SendAsync(
             tokenTrimmed,
-            "Test Firebase",
-            "Jika ini muncul, Firebase Admin SDK sudah berhasil"
+            "Test Notifikasi",
+            "Jangan lupa untuk melakukan presensi"
         );
 
         return Ok(new { success = true, messageId });
