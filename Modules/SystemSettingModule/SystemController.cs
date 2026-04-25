@@ -158,6 +158,59 @@ public class SystemController : ControllerBase
     }
 
     /// <summary>
+    /// GET /system/general-setting
+    /// Get all general settings
+    /// </summary>
+    [HttpGet("general-setting")]
+    public async Task<IActionResult> GetGeneralSettings()
+    {
+        try
+        {
+            var rows = await _settingService.GetAllAsync();
+            var data = rows.Select(x => new
+            {
+                key = x.Code,
+                value = x.Value,
+                description = x.Description
+            });
+
+            return Ok(new { data });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get general settings");
+            return StatusCode(500, new { message = "Failed to get general settings", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// PUT /system/general-setting/{key}
+    /// Update a general setting value
+    /// </summary>
+    [HttpPut("general-setting/{key}")]
+    public async Task<IActionResult> UpdateGeneralSetting(string key, [FromBody] UpdateGeneralSettingDto dto)
+    {
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Value))
+            return BadRequest(new { message = "value is required" });
+
+        try
+        {
+            var row = await _settingService.UpdateAsync(key, dto.Value);
+            var data = new { key = row.Code, value = row.Value, description = row.Description };
+            return Ok(new { data });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update general setting: {Key}", key);
+            return StatusCode(500, new { message = "Failed to update general setting", error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// GET /system/general-setting/{key}
     /// Get a general setting value by key
     /// </summary>
