@@ -48,5 +48,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule.Dto
 
         [JsonPropertyName("includeSummary")]
         public bool IncludeSummary { get; set; } = true;
+
+        [JsonPropertyName("includeTukin")]
+        public bool IncludeTukin { get; set; } = false;
     }
 }

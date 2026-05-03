@@ -24,6 +24,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             return status?.Trim().ToUpperInvariant() switch
             {
                 nameof(WorkingStatus.PRESENT) => "HADIR",
+                nameof(WorkingStatus.REVISION) => "REVISI",
                 nameof(WorkingStatus.OFFICIAL_TRAVEL) => "DINAS LUAR",
                 nameof(WorkingStatus.SICK) => "SAKIT",
                 nameof(WorkingStatus.PROBLEM) => "MASALAH PRESENSI",
@@ -111,19 +112,32 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 summary.Revision = await revisionQ.CountAsync();
             }
 
-            // Special rule: for current month statistics, TotalDays should be
-            // working days in the whole current month (1..last day) minus holidays/weekends.
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-                var monthStart = new DateOnly(today.Year, today.Month, 1);
-                var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-                summary.TotalDays = await CountWorkingDaysAsync(monthStart, monthEnd);
+            // TotalDays should reflect working days within the requested range
+            // (exclude weekends and configured holidays).
+            summary.TotalDays = await CountWorkingDaysAsync(startDate, endDate);
 
             return summary;
         }
 
         public async Task<TukinSummary> GetMyTukinSummaryAsync(Guid userId, DateOnly startDate, DateOnly endDate)
         {
+            // preload user to be able to derive tukin bruto even when there are no violations
+            var user = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Guid == userId)
+                .Select(u => new { u.Guid, u.KelasJabatan })
+                .FirstOrDefaultAsync();
+
+            decimal? tukinBrutoFromGrade = null;
+            if (user?.KelasJabatan != null)
+            {
+                tukinBrutoFromGrade = await _context.RefTunjanganKinerja
+                    .AsNoTracking()
+                    .Where(r => r.KelasJabatan == user.KelasJabatan.Value)
+                    .Select(r => (decimal?)r.TunjanganKinerjaAmount)
+                    .FirstOrDefaultAsync();
+            }
+
             // convert DateOnly -> DateTime (UTC) to avoid Unspecified kind error when sending to PostgreSQL
             var startDateUtc = DateTime.SpecifyKind(startDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
             var endDateUtc = DateTime.SpecifyKind(endDate.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Utc);
@@ -148,15 +162,18 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             var result = new TukinSummary
             {
                 Month = new DateTime(startDate.Year, startDate.Month, 1).ToString("MMMM yyyy", new System.Globalization.CultureInfo("id")),
-                Grade = null,
-                TukinBruto = 0m,
+                Grade = user?.KelasJabatan,
+                TukinBruto = tukinBrutoFromGrade ?? 0m,
                 TotalDeduction = 0m,
                 TukinReceived = 0m,
                 Violations = new List<TukinViolationDto>()
             };
 
             if (!violations.Any())
+            {
+                result.TukinReceived = result.TukinBruto;
                 return result;
+            }
 
             // tukin bruto: ambil dari violation pertama
             result.TukinBruto = violations.First().TukinBaseAmount;
@@ -217,6 +234,8 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
             var (startDate, endDate) = GetDateRange(dto.Period, dto.StartDate, dto.EndDate);
 
+            var workingDaysInRange = await CountWorkingDaysAsync(startDate, endDate);
+
             // Determine target users based on scope + rudimentary role checks (mirrors NestJS logic)
             var targets = await GetTargetUsersAsync(dto, currentUser);
 
@@ -224,7 +243,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 throw new ArgumentException("No users found for the specified criteria");
 
             // Collect statistics for each user
-            var bulkData = new List<(User user, StatisticSummary statistic)>();
+            var bulkData = new List<(User user, StatisticSummary statistic, TukinSummary? tukin)>();
             foreach (var u in targets)
             {
                 var stat = await GetStatisticAsync(new StatisticQueryParams
@@ -235,7 +254,14 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     UserId = u.Guid
                 });
 
-                bulkData.Add((u, stat));
+                // ensure total working days is consistent across users for the same range
+                stat.TotalDays = workingDaysInRange;
+
+                TukinSummary? tukin = null;
+                if (dto.IncludeTukin)
+                    tukin = await GetMyTukinSummaryAsync(u.Guid, startDate, endDate);
+
+                bulkData.Add((u, stat, tukin));
             }
 
             var reportTitle = string.IsNullOrWhiteSpace(dto.Title) ? "Bulk Attendance Report" : dto.Title.Trim();
@@ -244,16 +270,30 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             using var workbook = new XLWorkbook();
 
             if (dto.IncludeSummary)
-                await CreateSummarySheetAsync(workbook, bulkData, startDate, endDate, reportTitle, dto.Scope);
+            {
+                var map = dto.IncludeTukin
+                    ? bulkData.Where(x => x.tukin != null).ToDictionary(x => x.user.Guid, x => x.tukin!)
+                    : null;
+
+                await CreateSummarySheetAsync(
+                    workbook,
+                    bulkData.Select(x => (x.user, x.statistic)).ToList(),
+                    startDate,
+                    endDate,
+                    reportTitle,
+                    dto.Scope,
+                    dto.IncludeTukin,
+                    map);
+            }
 
             if (dto.SeparateSheets)
             {
-                foreach (var (user, stat) in bulkData)
-                    await CreateUserSheetAsync(workbook, user, stat, startDate, endDate);
+                foreach (var (user, stat, tukin) in bulkData)
+                    await CreateUserSheetAsync(workbook, user, stat, startDate, endDate, dto.IncludeTukin, tukin);
             }
             else
             {
-                await CreateConsolidatedSheetAsync(workbook, bulkData, startDate, endDate, reportTitle);
+                await CreateConsolidatedSheetAsync(workbook, bulkData.Select(x => (x.user, x.statistic)).ToList(), startDate, endDate, reportTitle);
 
                 if (dto.Period == ReportPeriod.MONTHLY)
                     await CreateDailyConsolidatedSheetAsync(workbook, targets, startDate, endDate);
@@ -373,9 +413,13 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             DateOnly startDate,
             DateOnly endDate,
             string title,
-            BulkReportScope scope)
+            BulkReportScope scope,
+            bool includeTukin,
+            Dictionary<Guid, TukinSummary>? tukinMap)
         {
             var ws = workbook.Worksheets.Add("Summary");
+
+            const string rupiahAccountingFormat = @"_(* ""Rp""\ #,##0_);_(* ""Rp""\ (#,##0);_(* ""Rp""\ ""-""??_);_(@_)";
 
             ws.Cell(1, 1).Value = title;
             ws.Range(1, 1, 1, 12).Merge();
@@ -391,7 +435,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             ws.Range(3, 1, 3, 12).Merge();
             ws.Cell(3, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            var headers = new[]
+            var headersBase = new List<string>
             {
                 "Nama Pegawai",
                 "NIP",
@@ -403,9 +447,17 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 "Sakit",
                 "Cuti",
                 "Dinas Luar",
-                "Total Presensi",
                 "Rate Kehadiran",
             };
+
+            if (includeTukin)
+            {
+                headersBase.Add("Tukin Bruto");
+                headersBase.Add("Tukin Potongan");
+                headersBase.Add("Tukin Diterima");
+            }
+
+            var headers = headersBase.ToArray();
 
             var headerRow = 5;
             for (var i = 0; i < headers.Length; i++)
@@ -431,7 +483,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     : "Unknown";
 
                 var attendanceRate = stat.TotalDays > 0
-                    ? ((double)stat.TotalAttendances / stat.TotalDays * 100d).ToString("0.00", CultureInfo.InvariantCulture) + "%"
+                    ? ((double)stat.Present / stat.TotalDays * 100d).ToString("0.00", CultureInfo.InvariantCulture) + "%"
                     : "0%";
 
                 ws.Cell(currentRow, 1).Value = user.FullName ?? string.Empty;
@@ -444,8 +496,25 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 ws.Cell(currentRow, 8).Value = stat.Sick;
                 ws.Cell(currentRow, 9).Value = stat.OnLeave;
                 ws.Cell(currentRow, 10).Value = stat.OfficialTravel;
-                ws.Cell(currentRow, 11).Value = stat.TotalAttendances;
-                ws.Cell(currentRow, 12).Value = attendanceRate;
+
+                ws.Cell(currentRow, 11).Value = attendanceRate;
+
+                if (includeTukin)
+                {
+                    TukinSummary? t = null;
+                    if (tukinMap != null && tukinMap.TryGetValue(user.Guid, out var found))
+                        t = found;
+
+                    ws.Cell(currentRow, 12).Value = (double)(t?.TukinBruto ?? 0m);
+                    ws.Cell(currentRow, 12).Style.NumberFormat.Format = rupiahAccountingFormat;
+                    ws.Cell(currentRow, 12).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    ws.Cell(currentRow, 13).Value = (double)(t?.TotalDeduction ?? 0m);
+                    ws.Cell(currentRow, 13).Style.NumberFormat.Format = rupiahAccountingFormat;
+                    ws.Cell(currentRow, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    ws.Cell(currentRow, 14).Value = (double)(t?.TukinReceived ?? 0m);
+                    ws.Cell(currentRow, 14).Style.NumberFormat.Format = rupiahAccountingFormat;
+                    ws.Cell(currentRow, 14).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                }
 
                 currentRow++;
             }
@@ -458,9 +527,13 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
             User user,
             StatisticSummary statistic,
             DateOnly startDate,
-            DateOnly endDate)
+            DateOnly endDate,
+            bool includeTukin,
+            TukinSummary? tukin)
         {
             var tz = await GetTimeZoneAsync();
+
+            const string rupiahAccountingFormat = @"_(* ""Rp""\ #,##0_);_(* ""Rp""\ (#,##0);_(* ""Rp""\ ""-""??_);_(@_)";
 
             var deptName = user.DepartmentId.HasValue
                 ? await _context.Department.AsNoTracking().Where(d => d.Guid == user.DepartmentId.Value).Select(d => d.Name).FirstOrDefaultAsync()
@@ -483,29 +556,31 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
             var ws = workbook.Worksheets.Add(sheetName);
 
+            var headerCols = includeTukin ? 10 : 8;
+
             ws.Cell(1, 1).Value = $"{user.FullName} ({user.Nip})";
-            ws.Range(1, 1, 1, 8).Merge();
+            ws.Range(1, 1, 1, headerCols).Merge();
             ws.Cell(1, 1).Style.Font.Bold = true;
             ws.Cell(1, 1).Style.Font.FontSize = 16;
             ws.Cell(1, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell(2, 1).Value = $"Sub Bagian: {deptName ?? "Unknown"}";
-            ws.Range(2, 1, 2, 8).Merge();
+            ws.Range(2, 1, 2, headerCols).Merge();
             ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell(3, 1).Value = $"Periode: {startDate:dd MMM yyyy} - {endDate:dd MMM yyyy}";
-            ws.Range(3, 1, 3, 8).Merge();
+            ws.Range(3, 1, 3, headerCols).Merge();
             ws.Cell(3, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             var row = 5;
             ws.Cell(row, 1).Value = "Ringkasan";
-            ws.Range(row, 1, row, 8).Merge();
+            ws.Range(row, 1, row, headerCols).Merge();
             ws.Cell(row, 1).Style.Font.Bold = true;
             ws.Cell(row, 1).Style.Font.FontSize = 14;
             row++;
 
             var attendanceRate = statistic.TotalDays > 0
-                ? ((double)statistic.TotalAttendances / statistic.TotalDays * 100d).ToString("0.00", CultureInfo.InvariantCulture) + "%"
+                ? ((double)statistic.Present / statistic.TotalDays * 100d).ToString("0.00", CultureInfo.InvariantCulture) + "%"
                 : "0%";
 
             var summary = new (string Label, object? Value)[]
@@ -527,6 +602,54 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 ws.Cell(row, 1).Value = label;
                 ws.Cell(row, 2).SetValue(val?.ToString() ?? string.Empty);
                 row++;
+            }
+
+            Dictionary<DateOnly, (decimal percent, decimal nominal)>? tukinByDate = null;
+            if (includeTukin)
+            {
+                tukin ??= await GetMyTukinSummaryAsync(user.Guid, startDate, endDate);
+
+                tukinByDate = (tukin?.Violations ?? new List<TukinViolationDto>())
+                    .GroupBy(v => DateOnly.FromDateTime(v.Date))
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (
+                            percent: g.Sum(x => x.Percent),
+                            nominal: g.Sum(x => x.NominalDeduction)
+                        )
+                    );
+
+                row++;
+                ws.Cell(row, 1).Value = "Ringkasan Tukin";
+                ws.Range(row, 1, row, headerCols).Merge();
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Cell(row, 1).Style.Font.FontSize = 14;
+                row++;
+
+                var tukinSummary = new (string Label, object? Value)[]
+                {
+                    ("Bulan", tukin?.Month ?? string.Empty),
+                    ("Grade", tukin?.Grade?.ToString() ?? string.Empty),
+                    ("Tukin Bruto", tukin?.TukinBruto ?? 0m),
+                    ("Total Potongan", tukin?.TotalDeduction ?? 0m),
+                    ("Tukin Diterima", tukin?.TukinReceived ?? 0m),
+                };
+
+                foreach (var (label, val) in tukinSummary)
+                {
+                    ws.Cell(row, 1).Value = label;
+
+                    if (val is decimal d)
+                    {
+                        ws.Cell(row, 2).Value = (double)d;
+                        ws.Cell(row, 2).Style.NumberFormat.Format = rupiahAccountingFormat;
+                    }
+                    else
+                    {
+                        ws.Cell(row, 2).SetValue(val?.ToString() ?? string.Empty);
+                    }
+                    row++;
+                }
             }
 
             if (statistic.Records != null && statistic.Records.Count > 0)
@@ -565,7 +688,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
 
                 row += 2;
                 ws.Cell(row, 1).Value = "Detail Presensi";
-                ws.Range(row, 1, row, 8).Merge();
+                ws.Range(row, 1, row, headerCols).Merge();
                 ws.Cell(row, 1).Style.Font.Bold = true;
                 ws.Cell(row, 1).Style.Font.FontSize = 14;
                 row++;
@@ -578,11 +701,15 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     "Jam Pulang",
                     "Jumlah Jam Kerja",
                     "Keterangan",
+                    "Potongan (%)",
+                    "Potongan (Rp)",
                 };
 
-                for (var i = 0; i < headers.Length; i++)
+                var effectiveHeaders = includeTukin ? headers : headers.Take(6).ToArray();
+
+                for (var i = 0; i < effectiveHeaders.Length; i++)
                 {
-                    ws.Cell(row, i + 1).Value = headers[i];
+                    ws.Cell(row, i + 1).Value = effectiveHeaders[i];
                     ws.Cell(row, i + 1).Style.Font.Bold = true;
                     ws.Cell(row, i + 1).Style.Fill.BackgroundColor = XLColor.FromArgb(0xE0, 0xE0, 0xE0);
                 }
@@ -599,6 +726,28 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     ws.Cell(row, 4).Value = FormatTimeHm(detail?.CheckOutTime, tz);
                     ws.Cell(row, 5).Value = (detail?.WorkHours ?? rec.WorkHours)?.ToString() ?? "-";
                     ws.Cell(row, 6).Value = string.IsNullOrWhiteSpace(detail?.Notes) ? "" : detail.Notes;
+
+                    if (includeTukin)
+                    {
+                        var percent = 0m;
+                        var nominal = 0m;
+                        if (tukinByDate != null && tukinByDate.TryGetValue(rec.Date, out var val))
+                        {
+                            percent = val.percent;
+                            nominal = val.nominal;
+                        }
+
+                        ws.Cell(row, 7).Value = percent > 0 ? percent.ToString("0.##", CultureInfo.InvariantCulture) + "%" : "";
+                        if (nominal > 0)
+                        {
+                            ws.Cell(row, 8).Value = (double)nominal;
+                            ws.Cell(row, 8).Style.NumberFormat.Format = rupiahAccountingFormat;
+                        }
+                        else
+                        {
+                            ws.Cell(row, 8).Value = "";
+                        }
+                    }
 
                     row++;
                 }
@@ -653,9 +802,7 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 ws.Cell(row, 1).Style.Fill.BackgroundColor = XLColor.FromArgb(0xCC, 0xCC, 0xCC);
                 row++;
 
-                var attendanceRate = stat.TotalDays > 0
-                    ? ((double)stat.TotalAttendances / stat.TotalDays * 100d).ToString("0.00", CultureInfo.InvariantCulture) + "%"
-                    : "0%";
+                var attendanceRate = stat.Present > 0 ? "100%" : "0%";
 
                 var summary = new (string Label, object? Value)[]
                 {
@@ -666,7 +813,6 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                     ("Sakit", stat.Sick),
                     ("Cuti", stat.OnLeave),
                     ("Dinas Luar", stat.OfficialTravel),
-                    ("Total Presensi", stat.TotalAttendances),
                     ("Rate Kehadiran", attendanceRate),
                 };
 
@@ -1024,6 +1170,11 @@ namespace presensi_kpu_batu_be.Modules.StatisticModule
                 switch (record.Status)
                 {
                     case nameof(WorkingStatus.PRESENT):
+                        summary.Present++;
+                        break;
+
+                    case nameof(WorkingStatus.REVISION):
+                        // treat revision as present for summary purposes
                         summary.Present++;
                         break;
 
