@@ -282,7 +282,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             if (dto == null)
                 throw new BadRequestException("Invalid request payload");
 
-            await ValidateLocationAsync(dto.Latitude, dto.Longitude);
+            await ValidateLocationAsync(userId, dto.Latitude, dto.Longitude, dto.Accuracy, dto.Timestamp);
 
             // ======================================================
             // 4. AMBIL ATTENDANCE
@@ -437,7 +437,7 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             if (dto == null)
                 throw new BadRequestException("Invalid request payload");
 
-            await ValidateLocationAsync(dto.Latitude, dto.Longitude);
+            await ValidateLocationAsync(userId, dto.Latitude, dto.Longitude, dto.Accuracy, dto.Timestamp);
 
             // ======================================================
             // 2. AMBIL ATTENDANCE
@@ -1004,8 +1004,36 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         }
 
         // Centralized validation for coordinates + geofence
-        private async Task ValidateLocationAsync(double latitude, double longitude)
+        private async Task ValidateLocationAsync(Guid userId, double latitude, double longitude, double accuracy, DateTime timestamp)
         {
+            var fakeGpsToggle = await _settingService.GetAsync(GeneralSettingCodes.IS_FAKE_GPS_DETECTION_ENABLED);
+            var fakeGpsEnabled = string.IsNullOrWhiteSpace(fakeGpsToggle)
+                || !bool.TryParse(fakeGpsToggle, out var fakeGpsParsed)
+                || fakeGpsParsed;
+
+            if (fakeGpsEnabled)
+            {
+                if (timestamp == default || timestamp.Kind != DateTimeKind.Utc)
+                {
+                    await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Invalid timestamp");
+                    throw new BadRequestException("Invalid timestamp");
+                }
+
+                if (accuracy <= 1 || accuracy > 200)
+                {
+                    await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Lokasi tidak akurat");
+                    throw new BadRequestException("Lokasi tidak akurat");
+                }
+
+                var nowUtc = await _timeProviderService.NowAsync();
+                var timestampDelta = (nowUtc - timestamp).Duration();
+                if (timestampDelta > TimeSpan.FromSeconds(30))
+                {
+                    await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Data lokasi tidak realtime");
+                    throw new BadRequestException("Data lokasi tidak realtime");
+                }
+            }
+
             // toggle: if IS_LOCATION_GEOFENCE_ENABLED == "false" skip validation
             var toggle = await _settingService.GetAsync(GeneralSettingCodes.IS_LOCATION_GEOFENCE_ENABLED);
             if (!string.IsNullOrWhiteSpace(toggle) && bool.TryParse(toggle, out var enabled) && !enabled)
@@ -1013,13 +1041,22 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             // Validate ranges
             if (double.IsNaN(latitude) || double.IsNaN(longitude))
+            {
+                await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Koordinat tidak valid");
                 throw new BadRequestException("Koordinat tidak valid");
+            }
 
             if (latitude < -90 || latitude > 90)
+            {
+                await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Latitude tidak valid");
                 throw new BadRequestException("Latitude tidak valid");
+            }
 
             if (longitude < -180 || longitude > 180)
+            {
+                await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Longitude tidak valid");
                 throw new BadRequestException("Longitude tidak valid");
+            }
 
             // Read single combined setting LATITUDE_LONGITUDE (expected: "lat, lon" or "lat, lon, radius")
             var combined = await _settingService.GetAsync(GeneralSettingCodes.LATITUDE_LONGITUDE);
@@ -1061,7 +1098,31 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
 
             var distance = CalculateDistanceMeters(latitude, longitude, geofenceLat, geofenceLon);
             if (distance > geofenceRadiusMeters)
+            {
+                await LogSuspiciousLocationAsync(
+                    userId,
+                    latitude,
+                    longitude,
+                    accuracy,
+                    timestamp,
+                    $"Outside geofence: distance {Math.Round(distance)} m > {geofenceRadiusMeters} m");
                 throw new BadRequestException($"Lokasi Anda berada di luar area kantor (jarak {Math.Round(distance)} m > {geofenceRadiusMeters} m)");
+            }
+        }
+
+        private async Task LogSuspiciousLocationAsync(Guid userId, double latitude, double longitude, double accuracy, DateTime timestamp, string reason)
+        {
+            _context.GeolocationValidationLogs.Add(new GeolocationValidationLog
+            {
+                UserId = userId,
+                Latitude = latitude,
+                Longitude = longitude,
+                Accuracy = accuracy,
+                TimestampUtc = timestamp,
+                Reason = reason
+            });
+
+            await _context.SaveChangesAsync();
         }
 
         // calculate distance in meters between two coordinates using Haversine formula

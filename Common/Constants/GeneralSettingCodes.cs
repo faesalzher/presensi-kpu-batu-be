@@ -15,4 +15,7 @@ public static class GeneralSettingCodes
 
     // Toggle to enable/disable geofence validation
     public const string IS_LOCATION_GEOFENCE_ENABLED = "IS_LOCATION_GEOFENCE_ENABLED"; // values: true/false
+
+    // Toggle to enable/disable fake GPS validations (timestamp/accuracy/realtime)
+    public const string IS_FAKE_GPS_DETECTION_ENABLED = "IS_FAKE_GPS_DETECTION_ENABLED"; // values: true/false
 }
