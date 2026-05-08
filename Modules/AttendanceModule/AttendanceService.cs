@@ -1006,20 +1006,25 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         // Centralized validation for coordinates + geofence
         private async Task ValidateLocationAsync(Guid userId, double latitude, double longitude, double accuracy, DateTime timestamp)
         {
+            // master toggle: if geofence is disabled, skip all location/fake-gps checks
+            var geofenceToggle = await _settingService.GetAsync(GeneralSettingCodes.IS_LOCATION_GEOFENCE_ENABLED);
+            var geofenceEnabled = ParseToggleEnabled(geofenceToggle, defaultValue: true);
+            if (!geofenceEnabled)
+                return;
+
             var fakeGpsToggle = await _settingService.GetAsync(GeneralSettingCodes.IS_FAKE_GPS_DETECTION_ENABLED);
-            var fakeGpsEnabled = string.IsNullOrWhiteSpace(fakeGpsToggle)
-                || !bool.TryParse(fakeGpsToggle, out var fakeGpsParsed)
-                || fakeGpsParsed;
+            var fakeGpsEnabled = ParseToggleEnabled(fakeGpsToggle, defaultValue: true);
 
             if (fakeGpsEnabled)
             {
-                if (timestamp == default || timestamp.Kind != DateTimeKind.Utc)
-                {
-                    await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Invalid timestamp");
-                    throw new BadRequestException("Invalid timestamp");
-                }
+                // sementara: penjagaan timestamp dinonaktifkan
+                // if (timestamp == default || timestamp.Kind != DateTimeKind.Utc)
+                // {
+                //     await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Invalid timestamp");
+                //     throw new BadRequestException("Invalid timestamp");
+                // }
 
-                if (accuracy <= 1 || accuracy > 200)
+                if (accuracy <= 1 || accuracy > 500)
                 {
                     await LogSuspiciousLocationAsync(userId, latitude, longitude, accuracy, timestamp, "Lokasi tidak akurat");
                     throw new BadRequestException("Lokasi tidak akurat");
@@ -1033,11 +1038,6 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                     throw new BadRequestException("Data lokasi tidak realtime");
                 }
             }
-
-            // toggle: if IS_LOCATION_GEOFENCE_ENABLED == "false" skip validation
-            var toggle = await _settingService.GetAsync(GeneralSettingCodes.IS_LOCATION_GEOFENCE_ENABLED);
-            if (!string.IsNullOrWhiteSpace(toggle) && bool.TryParse(toggle, out var enabled) && !enabled)
-                return;
 
             // Validate ranges
             if (double.IsNaN(latitude) || double.IsNaN(longitude))
@@ -1136,6 +1136,24 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                        Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
             double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
             return R * c;
+        }
+
+        private static bool ParseToggleEnabled(string? raw, bool defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return defaultValue;
+
+            var value = raw.Trim();
+
+            if (bool.TryParse(value, out var boolValue))
+                return boolValue;
+
+            return value.ToLowerInvariant() switch
+            {
+                "1" or "yes" or "y" or "on" => true,
+                "0" or "no" or "n" or "off" => false,
+                _ => defaultValue
+            };
         }
 
         private static double ToRadians(double angle) => angle * Math.PI / 180.0;

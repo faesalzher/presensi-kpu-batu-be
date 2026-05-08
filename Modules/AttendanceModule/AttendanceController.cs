@@ -44,9 +44,6 @@ public class AttendanceController : ControllerBase
     //[RequestSizeLimit(5 * 1024 * 1024)] // 5MB
     public async Task<IActionResult> CheckIn([FromForm] CheckInDto dto)
     {
-        if (dto.Timestamp == default)
-            return BadRequest(new { message = "Invalid timestamp" });
-
         var userGuid = GetUserGuid();
 
         //Guid? fileGuid = null;
@@ -64,9 +61,6 @@ public class AttendanceController : ControllerBase
     //[RequestSizeLimit(5 * 1024 * 1024)] // 5MB
     public async Task<IActionResult> CheckOut([FromForm] CheckOutDto dto)
     {
-        if (dto.Timestamp == default)
-            return BadRequest(new { message = "Invalid timestamp" });
-
         var userGuid = GetUserGuid();
 
         //Guid? fileGuid = null;
