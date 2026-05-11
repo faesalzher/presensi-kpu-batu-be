@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<GeneralSetting> GeneralSetting { get; set; }
     public DbSet<AttendanceViolation> AttendanceViolation { get; set; }
     public DbSet<AttendanceRevision> AttendanceRevision { get; set; }
+    public DbSet<AttendanceDeviceHistory> AttendanceDeviceHistory { get; set; }
     public DbSet<FileMetadata> FileMetadata { get; set; }
     public DbSet<RefTunjanganKinerja> RefTunjanganKinerja { get; set; }
     public DbSet<SchedulerLog> SchedulerLogs { get; set; }
@@ -51,6 +52,26 @@ public class AppDbContext : DbContext
                    .WithMany(a => a.Revision)
                    .HasForeignKey(x => x.AttendanceId)
                    .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AttendanceDeviceHistory>(builder =>
+        {
+            builder.HasOne(x => x.Attendance)
+                   .WithMany()
+                   .HasForeignKey(x => x.AttendanceId)
+                   .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(x => x.User)
+                   .WithMany()
+                   .HasForeignKey(x => x.UserId)
+                   .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasIndex(x => x.UserId);
+            builder.HasIndex(x => x.DeviceFingerprint);
+            builder.HasIndex(x => x.CreatedAt);
+
+            builder.Property(x => x.DeviceAnalyticsJson)
+                   .HasColumnType("jsonb");
         });
 
 

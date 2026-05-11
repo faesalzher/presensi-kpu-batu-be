@@ -198,6 +198,8 @@ builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 builder.Services.AddScoped<IGeneralSettingService, GeneralSettingService>();
 builder.Services.AddScoped<ITimeProviderService, TimeProviderService>();
+builder.Services.AddScoped<IDeviceAnalyticsService, DeviceAnalyticsService>();
+builder.Services.AddScoped<IDeviceAnalyticsQueryService, DeviceAnalyticsQueryService>();
 builder.Services.AddScoped<IStatisticService, StatisticService>();
 builder.Services.AddScoped<IGoogleDriveService, GoogleDriveService>();
 builder.Services.AddScoped<ITunjanganService, TunjanganService>();

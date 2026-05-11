@@ -20,9 +20,12 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
         private readonly ITimeProviderService _timeProviderService;
         private readonly IUserService _userService;
         private readonly ITunjanganService _tunjanganService;
+        private readonly IDeviceAnalyticsService _deviceAnalyticsService;
+        private readonly ILogger<AttendanceService> _logger;
 
         public AttendanceService(AppDbContext context, ILeaveRequestService leaveRequestsService, IGeneralSettingService settingService
-            , ITimeProviderService timeProvidersService, IUserService userService, ITunjanganService tunjanganService)
+            , ITimeProviderService timeProvidersService, IUserService userService, ITunjanganService tunjanganService,
+            IDeviceAnalyticsService deviceAnalyticsService, ILogger<AttendanceService> logger)
         {
             _context = context;
             _leaveRequestsService = leaveRequestsService;
@@ -30,6 +33,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             _timeProviderService = timeProvidersService;
             _userService = userService;
             _tunjanganService = tunjanganService;
+            _deviceAnalyticsService = deviceAnalyticsService;
+            _logger = logger;
         }
 
         public async Task<AttendanceResponse?> GetTodayAttendance(Guid userGuid)
@@ -376,6 +381,15 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
                 }
             }
 
+            try
+            {
+                await _deviceAnalyticsService.RecordAsync(userId, attendance.Guid, dto.DeviceAnalyticsJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Device analytics persistence failed for check-in. UserId={UserId}, AttendanceId={AttendanceId}", userId, attendance.Guid);
+            }
+
             return new AttendanceResponse
             {
                 Guid = attendance.Guid,
@@ -558,6 +572,15 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule
             }
 
             await _context.SaveChangesAsync();
+
+            try
+            {
+                await _deviceAnalyticsService.RecordAsync(userId, attendance.Guid, dto.DeviceAnalyticsJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Device analytics persistence failed for check-out. UserId={UserId}, AttendanceId={AttendanceId}", userId, attendance.Guid);
+            }
 
             // ======================================================
             // 7. RETURN

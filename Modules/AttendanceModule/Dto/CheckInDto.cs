@@ -14,6 +14,8 @@ namespace presensi_kpu_batu_be.Modules.AttendanceModule.Dto
 
         public string? Notes { get; set; }
 
+        public string? DeviceAnalyticsJson { get; set; }
+
         // Photo handled via IFormFile in controller
     }
 }
